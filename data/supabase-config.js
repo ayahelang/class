@@ -1,7 +1,8 @@
 window.GALLERY_SUPABASE = {
   url: "https://upnnjidobuujhvevfyaa.supabase.co",
-  // Publishable/anon key — RLS melindungi data. Proyek Supabase = sama dengan webgal.
+  // Publishable/anon key — designed to be public (RLS protects data).
   anonKey: "sb_publishable_Eq3QRGvkOEbc1ygpx8BATw_k0vgzHDz",
+  // Submit code is stored only in gallery_settings (DB), not in public frontend.
   defaultSubmitCode: "",
   adminEmails: [
     "admin@silverhawk.web.id",
@@ -14,7 +15,6 @@ window.GALLERY_SUPABASE = {
     "manage_alumni",
     "manage_angkatan",
     "manage_admins",
-    "view_users",
-    "manage_classroom"
+    "view_users"
   ]
 };
