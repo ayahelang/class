@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Course — Silverhawk Class</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">CL</span>
+      <span><b>Silverhawk Class</b><small>Online Classroom</small></span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html">Course</a>
+      <a href="admin.html">Pengajar</a>
+    </nav>
+    <div id="userbar" class="userchip"></div>
+  </header>
+
+  <main>
+    <p><a href="index.html">← Semua course</a></p>
+    <section class="hero">
+      <h1 id="courseTitle">Course</h1>
+      <p id="courseDesc" class="muted"></p>
+      <div class="progress-bar" title="Progress materi"><i id="progressFill"></i></div>
+      <p class="meta muted" id="progressLabel">Progress: —</p>
+      <span class="status" id="status"></span>
+    </section>
+
+    <section>
+      <h2 style="font-size:1rem">Modul & materi</h2>
+      <div id="moduleList"></div>
+    </section>
+
+    <section style="margin-top:28px">
+      <h2 style="font-size:1rem">Tugas</h2>
+      <div id="assignmentList"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="data/supabase-config.js"></script>
+  <script src="js/db-class.js"></script>
+  <script src="js/course.js"></script>
+</body>
+</html>

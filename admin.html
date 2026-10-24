@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pengajar — Silverhawk Class</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">CL</span>
+      <span><b>Silverhawk Class</b><small>Panel pengajar</small></span>
+    </a>
+    <nav class="topnav">
+      <a href="index.html">Course</a>
+      <a href="admin.html" class="active">Pengajar</a>
+    </nav>
+    <div id="userbar" class="userchip"></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Panel pengajar</h1>
+      <p class="muted">Kelola course, modul, materi, dan tugas. Hanya admin / pengajar.</p>
+      <div class="toolbar">
+        <button type="button" class="btn btn-primary" id="btnLogin">Login Google</button>
+        <button type="button" class="btn btn-ghost" id="btnLogout" hidden>Keluar</button>
+      </div>
+      <span class="status" id="status"></span>
+    </section>
+
+    <div id="adminGate" hidden>
+      <section class="card">
+        <h3>Course baru / edit</h3>
+        <div class="field"><label>Judul</label><input id="cTitle" placeholder="mis. Social Media Marketing"></div>
+        <div class="field"><label>Kode</label><input id="cCode" placeholder="SMM-2026"></div>
+        <div class="field"><label>Deskripsi</label><textarea id="cDesc" rows="2"></textarea></div>
+        <button type="button" class="btn btn-primary" id="btnSaveCourse">Simpan course</button>
+      </section>
+
+      <section>
+        <h2 style="font-size:1rem">Course yang ada</h2>
+        <div id="adminCourses"></div>
+      </section>
+
+      <section class="card" id="modulePanel" hidden>
+        <h3>Modul untuk: <span id="modCourseTitle"></span></h3>
+        <input type="hidden" id="modCourseId">
+        <div class="field"><label>Judul modul</label><input id="mTitle"></div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveModule">Tambah modul</button>
+        <ul class="list-mod" id="modList"></ul>
+      </section>
+
+      <section class="card" id="matPanel" hidden>
+        <h3>Materi di modul: <span id="matModTitle"></span></h3>
+        <input type="hidden" id="matModuleId">
+        <div class="field"><label>Judul materi</label><input id="matTitle"></div>
+        <div class="field"><label>Tipe</label>
+          <select id="matType">
+            <option value="text">Teks</option>
+            <option value="link">Link</option>
+            <option value="video">Video (URL)</option>
+            <option value="pdf">PDF (URL)</option>
+            <option value="embed">Embed URL</option>
+          </select>
+        </div>
+        <div class="field"><label>URL (opsional)</label><input id="matUrl" placeholder="https://"></div>
+        <div class="field"><label>Isi / catatan</label><textarea id="matBody" rows="3"></textarea></div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveMat">Tambah materi</button>
+        <ul class="list-mod" id="matList"></ul>
+      </section>
+
+      <section class="card" id="asgPanel" hidden>
+        <h3>Tugas untuk course: <span id="asgCourseTitle"></span></h3>
+        <input type="hidden" id="asgCourseId">
+        <div class="field"><label>Judul tugas</label><input id="aTitle"></div>
+        <div class="field"><label>Deskripsi</label><textarea id="aDesc" rows="2"></textarea></div>
+        <div class="field"><label>Deadline (lokal)</label><input type="datetime-local" id="aDue"></div>
+        <div class="field"><label>Nilai maks</label><input type="number" id="aMax" value="100"></div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnSaveAsg">Tambah tugas</button>
+        <ul class="list-mod" id="asgList"></ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="data/supabase-config.js"></script>
+  <script src="js/db-class.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
