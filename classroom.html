@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Silverhawk Class — Classroom Online</title>
+  <meta name="description" content="Classroom online Silverhawk — course, materi, tugas, nilai.">
+  <link rel="canonical" href="https://class.silverhawk.web.id/">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/classroom.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="classroom.html">
+      <span class="brand-mark">CL</span>
+      <span><b>Silverhawk Class</b><small>Online Classroom</small></span>
+    </a>
+    <nav class="topnav">
+      <a href="classroom.html" class="active">Course</a>
+      <a href="classroom-admin.html">Pengajar</a>
+      <a href="https://webgal.silverhawk.web.id/" target="_blank" rel="noopener">Webgal ↗</a>
+      <a href="https://cbt.silverhawk.web.id/" target="_blank" rel="noopener">CBT ↗</a>
+    </nav>
+    <div id="userbar" class="userchip"></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Classroom</h1>
+      <p>Materi, progress belajar, tugas, dan nilai — terhubung database yang sama dengan Webgal, tanpa mengganggu gallery & chat.</p>
+      <div class="toolbar">
+        <button type="button" class="btn btn-primary" id="btnLogin">Login Google</button>
+        <button type="button" class="btn btn-ghost" id="btnLogout" hidden>Keluar</button>
+        <span class="status" id="status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="muted" style="font-size:13px;text-transform:uppercase;letter-spacing:.06em">Daftar course</h2>
+      <div id="courseList" class="grid cols-2"></div>
+      <p class="muted" id="emptyHint" hidden>Belum ada course. Pengajar/admin: buka menu <b>Pengajar</b> untuk menambah.</p>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="data/supabase-config.js"></script>
+  <script src="js/db-class.js"></script>
+  <script src="js/classroom-home.js"></script>
+</body>
+</html>

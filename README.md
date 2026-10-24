@@ -1,43 +1,38 @@
-# Silverhawk Class
+# Silverhawk Class (`class`)
 
-Online classroom (Fase 1 + 2) untuk SMA PMA / Silverhawk.
+Kloningan penuh **webgal** + modul **Classroom Fase 1 & 2**, untuk deploy di:
 
-- **Live (rencana):** https://class.silverhawk.web.id  
-- **Repo:** `ayahelang/class`  
-- **Database:** **sama** dengan [webgal](https://webgal.silverhawk.web.id) (satu proyek Supabase)  
-- **Isolasi data:** hanya tabel berawalan `classroom_*` — **tidak** mengubah tabel `gallery_*` (chat, absensi, karya, dll.)
+**https://class.silverhawk.web.id**
 
-## Deploy GitHub Pages
+Repo GitHub: `ayahelang/class`  
+Database: **proyek Supabase yang sama** dengan [webgal](https://webgal.silverhawk.web.id)  
+Isolasi: tabel baru `classroom_*` saja — **tidak mengubah** tabel `gallery_*`.
 
-1. Buat repo `class` di akun `ayahelang`
-2. Upload isi folder ini ke `main`
-3. Settings → Pages → Deploy from branch `main` /
-4. Custom domain: `class.silverhawk.web.id` (CNAME sudah ada)
-5. DNS: CNAME `class` → `ayahelang.github.io`
+## Checkpoint webgal (restore)
 
-## Supabase (wajib sekali)
+Sebelum jalur classroom:  
+https://github.com/ayahelang/webgal/commit/99d21da3ebc1d57914f0362dc0c49156bf336065 · 24 Okt 2026
 
-Jalankan di SQL Editor proyek **yang sama** dengan webgal:
+## Fitur Classroom (baru)
 
-`sql/patch-classroom-phase1-2.sql`
+| Halaman | Isi |
+|---------|-----|
+| `classroom.html` | Daftar course |
+| `classroom-course.html` | Modul, materi, progress, kumpul tugas |
+| `classroom-admin.html` | Panel pengajar: course/modul/materi/tugas/nilai |
 
-Ini hanya **CREATE TABLE IF NOT EXISTS** untuk `classroom_*`. Aman untuk webgal.
+SQL: `sql/patch-classroom-phase1-2.sql` (wajib di-run sekali di Supabase)
 
-## Webgal tetap aman karena
+## Deploy
 
-| Webgal | Class |
-|--------|--------|
-| Domain & repo terpisah | Domain & repo terpisah |
-| Tabel `gallery_*` | Tabel `classroom_*` baru |
-| Kode/deploy tidak saling timpa | Kode/deploy tidak saling timpa |
-| Satu Supabase project | Satu Supabase project |
+1. Buat repo **ayahelang/class**, upload isi folder ini ke `main`
+2. Pages → `main` / root → custom domain **class.silverhawk.web.id**
+3. DNS: `CNAME class → ayahelang.github.io`
+4. Supabase Auth → Redirect URLs: tambah `https://class.silverhawk.web.id`
+5. SQL Editor → jalankan `sql/patch-classroom-phase1-2.sql`
 
-## Fase
+Detail: `docs/DEPLOY-CLASS.md`
 
-- **Fase 1:** Course → Modul → Materi → Progress  
-- **Fase 2:** Tugas → Kumpul → Nilai  
-- **Fase 3 (CBT):** https://cbt.silverhawk.web.id (repo terpisah)
+## Yang tetap dari webgal
 
-## Checkpoint webgal (jangan dihapus)
-
-Sebelum classroom: commit `99d21da3ebc1d57914f0362dc0c49156bf336065` di repo `webgal` · 24 Okt 2026.
+Gallery, video, desain, chat, absensi, admin, skills, dll. — semua ikut dalam paket ini supaya class punya ekosistem lengkap di domain sendiri, tanpa mengganggu deploy webgal.
