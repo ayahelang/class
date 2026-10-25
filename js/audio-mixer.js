@@ -544,11 +544,15 @@
     /** Posisi playhead di sumbu buffer track [0..duration], analog currentPlayhead di timeline utama */
     function trackLocalPos(tr) {
       if (!tr || !tr.buffer) return 0;
-      var dur = tr.buffer.duration;
-      var local = currentPlayhead() - (tr.offset || 0);
-      if (local < 0) return 0;
-      if (local > dur) return dur;
-      return local;
+      var off = tr.offset || 0;
+      var tIn = trackTrimIn(tr);
+      var tOut = trackTrimOut(tr);
+      var activeDur = tOut - tIn;
+      var ph = currentPlayhead();
+      // buffer di bawah playhead (model DAW)
+      if (ph <= off) return tIn;
+      if (ph >= off + activeDur) return tOut;
+      return tIn + (ph - off);
     }
 
 
@@ -556,8 +560,8 @@
       var m = 0;
       tracks.forEach(function (t) {
         if (!t.buffer) return;
-        // ujung timeline = offset + trimOut (akhir region aktif)
-        var end = (t.offset || 0) + trackTrimOut(t);
+        // ujung clip di timeline = Start + (MarkOut - MarkIn)
+        var end = (t.offset || 0) + trackActiveDur(t);
         if (end > m) m = end;
       });
       return m;
@@ -743,31 +747,63 @@
 
     function updateTransportUI() {
       var total = maxDur();
+      var hasTracks = tracks.length > 0 && total > 0.001;
+
+      // Clamp playhead & region ke total terbaru (setelah Mark Out / hapus track)
+      if (!hasTracks) {
+        playhead = 0;
+        regionIn = 0;
+        regionOut = null;
+      } else {
+        if (playhead > total) playhead = total;
+        if (regionIn > total) regionIn = Math.max(0, total - 0.05);
+        if (regionOut != null) {
+          if (regionOut > total) regionOut = total;
+          if (regionOut < regionIn) regionOut = Math.min(total, regionIn + 0.05);
+        }
+      }
+
       var cur = currentPlayhead();
-      if (total > 0 && cur > total) cur = total;
+      if (hasTracks && cur > total) cur = total;
       playhead = isPlaying ? cur : playhead;
-      if (clockEl) clockEl.textContent = fmt(playhead);
-      if (clockEndEl) clockEndEl.textContent = fmt(total);
-      var pct = total > 0 ? Math.min(1, playhead / total) : 0;
-      if (tfillEl) tfillEl.style.width = pct * 100 + "%";
-      if (theadEl) theadEl.style.left = pct * 100 + "%";
-      // region overlay
-      var reg = getRegion();
-      if (total > 0 && regionEl) {
-        regionEl.style.left = (reg.start / total) * 100 + "%";
-        regionEl.style.width = (reg.dur / total) * 100 + "%";
-      }
-      if (total > 0 && handleInEl) handleInEl.style.left = (reg.start / total) * 100 + "%";
-      if (total > 0 && handleOutEl) handleOutEl.style.left = (reg.end / total) * 100 + "%";
-      if (regionLabelEl) {
-        regionLabelEl.textContent =
-          fmt(reg.dur) + (reg.dur >= reg.total - 0.05 ? " (penuh)" : "");
-      }
-      if (regionInTextEl && document.activeElement !== regionInTextEl) {
-        regionInTextEl.value = fmt(reg.start);
-      }
-      if (regionOutTextEl && document.activeElement !== regionOutTextEl) {
-        regionOutTextEl.value = fmt(reg.end);
+
+      if (!hasTracks) {
+        if (clockEl) clockEl.textContent = "";
+        if (clockEndEl) clockEndEl.textContent = "";
+        if (tfillEl) tfillEl.style.width = "0%";
+        if (theadEl) theadEl.style.left = "0%";
+        if (regionEl) {
+          regionEl.style.left = "0%";
+          regionEl.style.width = "0%";
+        }
+        if (handleInEl) handleInEl.style.left = "0%";
+        if (handleOutEl) handleOutEl.style.left = "100%";
+        if (regionLabelEl) regionLabelEl.textContent = "";
+        if (regionInTextEl && document.activeElement !== regionInTextEl) regionInTextEl.value = "";
+        if (regionOutTextEl && document.activeElement !== regionOutTextEl) regionOutTextEl.value = "";
+      } else {
+        if (clockEl) clockEl.textContent = fmt(playhead);
+        if (clockEndEl) clockEndEl.textContent = fmt(total);
+        var pct = Math.min(1, playhead / total);
+        if (tfillEl) tfillEl.style.width = pct * 100 + "%";
+        if (theadEl) theadEl.style.left = pct * 100 + "%";
+        var reg = getRegion();
+        if (regionEl) {
+          regionEl.style.left = (reg.start / total) * 100 + "%";
+          regionEl.style.width = (reg.dur / total) * 100 + "%";
+        }
+        if (handleInEl) handleInEl.style.left = (reg.start / total) * 100 + "%";
+        if (handleOutEl) handleOutEl.style.left = (reg.end / total) * 100 + "%";
+        if (regionLabelEl) {
+          regionLabelEl.textContent =
+            fmt(reg.dur) + (reg.dur >= reg.total - 0.05 ? " (penuh)" : "");
+        }
+        if (regionInTextEl && document.activeElement !== regionInTextEl) {
+          regionInTextEl.value = fmt(reg.start);
+        }
+        if (regionOutTextEl && document.activeElement !== regionOutTextEl) {
+          regionOutTextEl.value = fmt(reg.end);
+        }
       }
 
       var bars = listEl ? listEl.querySelectorAll("[data-amx-prog]") : [];
@@ -785,8 +821,14 @@
         var dur = tr.buffer.duration;
         var tIn = trackTrimIn(tr);
         var tOut = trackTrimOut(tr);
-        // Sumbu bar = [0 .. duration] buffer — sama konsep timeline utama
-        var local = playhead - off;
+        var activeDur = tOut - tIn;
+        // Sumbu bar = buffer 0..duration
+        // Di model DAW: di mixTime=offset terdengar buffer[trimIn]
+        // → posisi buffer = trimIn + (playhead - offset) saat di dalam clip
+        var local;
+        if (playhead <= off) local = tIn;
+        else if (playhead >= off + activeDur) local = tOut;
+        else local = tIn + (playhead - off);
         if (local < 0) local = 0;
         if (local > dur) local = dur;
         var pBar = dur > 0 ? local / dur : 0;
@@ -811,7 +853,19 @@
         var curLab = listEl.querySelector('[data-amx-ph-cur="' + idx + '"]');
         var durLab = listEl.querySelector('[data-amx-ph-dur="' + idx + '"]');
         if (curLab) curLab.textContent = fmt(local);
-        if (durLab) durLab.textContent = fmt(dur);
+        // kanan bar: ujung region aktif (trimOut) — ikut Mark Out live
+        if (durLab) durLab.textContent = fmt(tOut);
+        // header track: durasi aktif (trimOut - trimIn)
+        var row = listEl.querySelector('.amx-track[data-track-i="' + idx + '"]');
+        if (row) {
+          var hdDur = row.querySelector(".amx-track-dur");
+          if (hdDur) {
+            var act = Math.max(0, tOut - tIn);
+            var offSec = tr.offset || 0;
+            hdDur.textContent =
+              fmt(act) + (offSec > 0.05 ? " @" + fmt(offSec) : "");
+          }
+        }
       }
     }
 
@@ -1116,19 +1170,22 @@
     }
 
     function scheduleTrack(tr, head, t0) {
-      // Sumbu buffer = bar track: mixTime = offset + bufferTime
+      // Model DAW:
+      //  - Start (offset) = posisi clip di timeline utama
+      //  - Mark In = 0:00 konten audio (buffer[trimIn] terdengar di mixTime=offset)
+      //  - Clip aktif di timeline: [offset, offset + (trimOut-trimIn)]
       if (!tr || !tr.buffer) return null;
       var off = tr.offset || 0;
       var tIn = trackTrimIn(tr);
       var tOut = trackTrimOut(tr);
-      // bagian track yang aktif di timeline: [offset+tIn, offset+tOut]
-      var trackStart = off + tIn;
-      var trackEnd = off + tOut;
+      var activeDur = tOut - tIn;
+      var trackStart = off;
+      var trackEnd = off + activeDur;
       if (head >= trackEnd - 0.001) return null;
       var when = t0;
       var offsetInBuffer = tIn;
       if (head > trackStart) {
-        offsetInBuffer = head - off; // absolut di buffer
+        offsetInBuffer = tIn + (head - off);
         when = t0;
       } else {
         when = t0 + (trackStart - head);
@@ -1193,7 +1250,11 @@
       listEl.innerHTML = "";
       if (!tracks.length) {
         listEl.innerHTML = '<p class="muted amx-empty">Belum ada track.</p>';
+        playhead = 0;
+        regionIn = 0;
+        regionOut = null;
         updateTransportUI();
+        setStatus("Belum ada track.");
         return;
       }
       tracks.forEach(function (tr, idx) {
@@ -1245,7 +1306,7 @@
           ) +
           "</span>" +
           '<span class="amx-track-dur">' +
-          fmt(tr.buffer ? tr.buffer.duration : 0) +
+          fmt(tr.buffer ? trackActiveDur(tr) : 0) +
           offLabel +
           "</span>" +
           '<div class="amx-track-acts">' +
@@ -1317,8 +1378,8 @@
           "</div>" +
           '<span class="amx-track-ph-dur" data-amx-ph-dur="' +
           idx +
-          '" title="Durasi total track">' +
-          fmt(tr.buffer ? tr.buffer.duration : 0) +
+          '" title="Akhir region track (Mark Out)">' +
+          fmt(tr.buffer ? trackTrimOut(tr) : 0) +
           "</span>" +
           '<button type="button" class="btn btn-ghost amx-xs amx-trk-region-reset" data-act="trk-region-reset" data-i="' +
           idx +
@@ -1455,7 +1516,12 @@
 
         listEl.appendChild(row);
       });
-      setStatus(tracks.length + "/" + MAX_TRACKS + " · total " + fmt(maxDur()));
+      var tot = maxDur();
+      setStatus(
+        tracks.length
+          ? tracks.length + "/" + MAX_TRACKS + " · total " + fmt(tot)
+          : "Belum ada track."
+      );
       updateTransportUI();
       setTrackMetersVisible(isPlaying);
     }
@@ -1757,14 +1823,15 @@
         var off = t.offset || 0;
         var tIn = trackTrimIn(t);
         var tOut = trackTrimOut(t);
-        // mixTime = offset + bufferTime
-        var trackStart = off + tIn;
-        var trackEnd = off + tOut;
+        var activeDur = tOut - tIn;
+        // clip di timeline: [offset, offset+activeDur]
+        var trackStart = off;
+        var trackEnd = off + activeDur;
         var playStart = Math.max(trackStart, start);
         var playEnd = Math.min(trackEnd, end);
         if (playEnd - playStart < 0.01) return;
         var when = playStart - start;
-        var offsetInBuffer = playStart - off; // absolut buffer
+        var offsetInBuffer = tIn + (playStart - off);
         var len = playEnd - playStart;
         var src = offline.createBufferSource();
         src.buffer = t.buffer;
@@ -2432,8 +2499,13 @@
           setTrimOut(drag.i, sec);
           updateTransportUI();
         } else {
-          // scrub → seek di timeline mix
-          seekTo((tr.offset || 0) + sec);
+          // scrub di sumbu buffer → mixTime = offset + (sec - trimIn)
+          var tInS = trackTrimIn(tr);
+          var tOutS = trackTrimOut(tr);
+          var rel = sec - tInS;
+          if (rel < 0) rel = 0;
+          if (rel > tOutS - tInS) rel = tOutS - tInS;
+          seekTo((tr.offset || 0) + rel);
         }
       }
 
@@ -2536,7 +2608,15 @@
       stopPlayback(true);
       ensureCtx();
       var tr = tracks[k];
-      var head = fromHead != null ? fromHead : tr.offset || 0;
+      var tIn = trackTrimIn(tr);
+      var tOut = trackTrimOut(tr);
+      var off = tr.offset || 0;
+      var activeDur = tOut - tIn;
+      // Default (play pertama): mulai di Start clip = offset → audio dari Mark In
+      var head = fromHead != null ? fromHead : off;
+      // Clamp ke dalam clip aktif [offset, offset+activeDur]
+      if (head < off) head = off;
+      if (head >= off + activeDur) head = off;
       playhead = head;
       playStartedAtHead = head;
       playStartedAtCtx = audioCtx.currentTime + 0.02;
@@ -2545,10 +2625,8 @@
       var src = audioCtx.createBufferSource();
       src.buffer = tr.buffer;
       connectTrackLive(src, tr);
-      var tIn = trackTrimIn(tr);
-      var tOut = trackTrimOut(tr);
-      // buffer pos = head - offset (sumbu sama dengan bar)
-      var offIn = Math.max(0, head - (tr.offset || 0));
+      // buffer: Mark In + posisi relatif di clip
+      var offIn = tIn + (head - off);
       if (offIn < tIn) offIn = tIn;
       if (offIn >= tOut) offIn = tIn;
       var rem = Math.max(0.05, tOut - offIn);
@@ -2563,7 +2641,7 @@
       startTransportLoop();
       setTrackMetersVisible(true);
       renderTracks();
-      setStatus("Play T" + (k + 1) + " @ " + fmt(head));
+      setStatus("Play T" + (k + 1) + " dari Mark In @ " + fmt(tIn) + " (mix " + fmt(head) + ")");
     }
 
     function pauseSoloOrMix() {
@@ -2648,11 +2726,13 @@
         if (isPlaying && soloPlayIdx === k) {
           pauseSoloOrMix();
         } else if (isPlaying && soloPlayIdx !== k) {
-          // resume from current playhead if same session pause on this track
-          startSoloTrack(k, playhead > (tracks[k].offset || 0) ? playhead : tracks[k].offset || 0);
-        } else if (!isPlaying && soloPlayIdx === k && playhead > (tracks[k].offset || 0)) {
+          // pindah ke track lain: mulai dari Mark In (awal clip)
+          startSoloTrack(k, tracks[k].offset || 0);
+        } else if (!isPlaying && soloPlayIdx === k) {
+          // resume setelah pause di track yang sama
           startSoloTrack(k, playhead);
         } else {
+          // play pertama / setelah stop: dari Mark In
           startSoloTrack(k, tracks[k].offset || 0);
         }
       });
