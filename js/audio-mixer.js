@@ -104,101 +104,19 @@
     return new Blob([buffer], { type: "audio/wav" });
   }
 
-  /**
-   * Reverb algoritmik (comb + early reflection) — gaya DAW web / BandLab live.
-   * Tanpa ConvolverNode + noise IR → tidak gresekan, ringan, tidak perlu storage.
-   * Return { input, output } GainNodes.
-   */
-/**
-   * Reverb algoritmik ringan (early + 4 comb damped + 2 allpass) — gaya live DAW web.
-   * Tanpa Convolver/IR noise → tidak gresekan, CPU rendah, TANPA storage sementara.
-   */
-  function createAlgoReverb(ctx, opts) {
-    opts = opts || {};
-    var input = ctx.createGain();
-    input.gain.value = 1;
-    var output = ctx.createGain();
-    output.gain.value = 1;
-
-    // Split: early reflections (singkat, bersih)
-    var erDelay = ctx.createDelay(0.25);
-    erDelay.delayTime.value = opts.earlyMs != null ? opts.earlyMs / 1000 : 0.022;
-    var erGain = ctx.createGain();
-    erGain.gain.value = opts.earlyGain != null ? opts.earlyGain : 0.18;
-    var erLp = ctx.createBiquadFilter();
-    erLp.type = "lowpass";
-    erLp.frequency.value = 4500;
-    input.connect(erDelay);
-    erDelay.connect(erLp);
-    erLp.connect(erGain);
-    erGain.connect(output);
-
-    // Comb bank (lebih sedikit + feedback lebih rendah = tidak metallic/gresek)
-    var combs = opts.combs || [0.031, 0.037, 0.043, 0.053];
-    var fbBase = opts.feedback != null ? opts.feedback : 0.58;
-    var combLevel = opts.combGain != null ? opts.combGain : 0.14;
-    var dampHz = opts.dampHz != null ? opts.dampHz : 2800;
-    for (var i = 0; i < combs.length; i++) {
-      var d = ctx.createDelay(1.0);
-      d.delayTime.value = combs[i];
-      var fbg = ctx.createGain();
-      fbg.gain.value = Math.max(0.35, fbBase - i * 0.03);
-      var lpf = ctx.createBiquadFilter();
-      lpf.type = "lowpass";
-      lpf.frequency.value = Math.max(1200, dampHz - i * 180);
-      lpf.Q.value = 0.5;
-      var mix = ctx.createGain();
-      mix.gain.value = combLevel;
-      input.connect(d);
-      d.connect(lpf);
-      lpf.connect(fbg);
-      fbg.connect(d);
-      lpf.connect(mix);
-      mix.connect(output);
+  /** Impulse response sederhana untuk reverb (tanpa file eksternal) */
+  function makeImpulse(ctx, seconds, decay) {
+    var rate = ctx.sampleRate;
+    var len = Math.floor(rate * (seconds || 1.8));
+    var impulse = ctx.createBuffer(2, len, rate);
+    decay = decay || 2.2;
+    for (var c = 0; c < 2; c++) {
+      var data = impulse.getChannelData(c);
+      for (var i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
     }
-
-    // 2× allpass (difusi lembut, bukan noise)
-    function allpass(delaySec, g) {
-      var din = ctx.createGain();
-      var dout = ctx.createGain();
-      var del = ctx.createDelay(0.5);
-      del.delayTime.value = delaySec;
-      var fg = ctx.createGain();
-      fg.gain.value = g;
-      var inv = ctx.createGain();
-      inv.gain.value = -g;
-      din.connect(del);
-      din.connect(inv);
-      inv.connect(dout);
-      del.connect(fg);
-      fg.connect(din);
-      del.connect(dout);
-      return { input: din, output: dout };
-    }
-    var ap1 = allpass(0.005, 0.5);
-    var ap2 = allpass(0.0117, 0.5);
-    // insert allpass on wet bus: rebuild path through series
-    // (output currently collects combs+early — route through allpass for smoother tail)
-    var mid = ctx.createGain();
-    // reconnect: we can't easily tear graph; instead post-filter series on a new node
-    var air = ctx.createBiquadFilter();
-    air.type = "lowpass";
-    air.frequency.value = opts.airHz != null ? opts.airHz : 5200;
-    air.Q.value = 0.707;
-    var hs = ctx.createBiquadFilter();
-    hs.type = "highshelf";
-    hs.frequency.value = 3500;
-    hs.gain.value = -6; // kurangi hiss atas
-
-    var realOut = ctx.createGain();
-    realOut.gain.value = 1;
-    output.connect(ap1.input);
-    ap1.output.connect(ap2.input);
-    ap2.output.connect(hs);
-    hs.connect(air);
-    air.connect(realOut);
-
-    return { input: input, output: realOut };
+    return impulse;
   }
 
 
@@ -470,7 +388,8 @@
     var CHAT_KBPS = 48;
     var CHAT_MAX_SEC = 120; // ~48kbps mono ≈ 0.7 MB / 2 mnt
     var CHAT_MAX_BYTES = 1.8 * 1024 * 1024;
-    var sharedReverb = null; // { input, output } algo reverb — bukan Convolver
+    var sharedConvolver = null;
+    var sharedImpulse = null;
 
     if (btnExport) {
       if (sendLabel && onExport) {
@@ -504,17 +423,13 @@
 
     function ensureReverb() {
       ensureCtx();
-      if (!sharedReverb) {
-        sharedReverb = createAlgoReverb(audioCtx, {
-          feedback: 0.55,
-          dampHz: 2600,
-          combGain: 0.12,
-          earlyGain: 0.16,
-          airHz: 5000,
-        });
-        sharedReverb.output.connect(ensureMasterGain());
+      if (!sharedConvolver) {
+        sharedConvolver = audioCtx.createConvolver();
+        sharedImpulse = makeImpulse(audioCtx, 1.6, 2.4);
+        sharedConvolver.buffer = sharedImpulse;
+        sharedConvolver.connect(ensureMasterGain());
       }
-      return sharedReverb;
+      return sharedConvolver;
     }
 
     function setStatus(t) {
@@ -1228,38 +1143,21 @@
       var wetGain = null;
       ensureReverb();
       wetGain = audioCtx.createGain();
-      wetGain.gain.value = vol * Math.min(0.7, Math.max(0, rev));
+      wetGain.gain.value = vol * rev;
       src.connect(wetGain);
       try {
         if (panNode) {
           var wetPan = audioCtx.createStereoPanner();
           wetPan.pan.value = Math.max(-1, Math.min(1, bal));
           wetGain.connect(wetPan);
-          wetPan.connect(sharedReverb.input);
+          wetPan.connect(sharedConvolver);
           panNode._wetPan = wetPan;
         } else {
-          wetGain.connect(sharedReverb.input);
+          wetGain.connect(sharedConvolver);
         }
       } catch (e2) {
-        wetGain.connect(sharedReverb.input);
+        wetGain.connect(sharedConvolver);
       }
-      // Delay / echo (algoritmik, ringan — tanpa storage)
-      var dlyAmt = typeof tr.delay === "number" ? tr.delay : 0;
-      var delayNode = audioCtx.createDelay(1.0);
-      delayNode.delayTime.value = 0.25;
-      var dlyFb = audioCtx.createGain();
-      dlyFb.gain.value = 0.25 + 0.4 * Math.min(1, Math.max(0, dlyAmt));
-      var dlyWet = audioCtx.createGain();
-      dlyWet.gain.value = vol * Math.min(0.9, Math.max(0, dlyAmt)) * 0.75;
-      var dlyLp = audioCtx.createBiquadFilter();
-      dlyLp.type = "lowpass";
-      dlyLp.frequency.value = 4200;
-      src.connect(dlyWet);
-      dlyWet.connect(delayNode);
-      delayNode.connect(dlyLp);
-      dlyLp.connect(dlyFb);
-      dlyFb.connect(delayNode);
-      dlyLp.connect(dest);
       var trkAn = null;
       try {
         trkAn = audioCtx.createAnalyser();
@@ -1270,8 +1168,6 @@
       liveGains.push({
         dry: dry,
         wet: wetGain,
-        dlyWet: dlyWet,
-        dlyFb: dlyFb,
         track: tr,
         src: src,
         analyser: trkAn,
@@ -1285,15 +1181,12 @@
         if (!g.track) return;
         var vol = effectiveTrackVol(g.track);
         var rev = typeof g.track.reverb === "number" ? g.track.reverb : 0;
-        var dly = typeof g.track.delay === "number" ? g.track.delay : 0;
         var semi = typeof g.track.semitones === "number" ? g.track.semitones : 0;
         var bal = typeof g.track.balance === "number" ? g.track.balance : 0;
         bal = Math.max(-1, Math.min(1, bal));
         try {
           if (g.dry) g.dry.gain.value = vol;
-          if (g.wet) g.wet.gain.value = vol * Math.min(0.7, Math.max(0, rev));
-          if (g.dlyWet) g.dlyWet.gain.value = vol * Math.min(0.9, Math.max(0, dly)) * 0.75;
-          if (g.dlyFb) g.dlyFb.gain.value = 0.25 + 0.4 * Math.min(1, Math.max(0, dly));
+          if (g.wet) g.wet.gain.value = vol * rev;
           if (g.src && g.src.detune) g.src.detune.value = semi * 100;
           if (g.pan) g.pan.pan.value = bal;
           if (g.wetPan) g.wetPan.pan.value = bal;
@@ -1402,7 +1295,6 @@
           offSec > 0.05 ? " @" + fmt(offSec) : "";
         var vol = typeof tr.volume === "number" ? tr.volume : 1;
         var rev = typeof tr.reverb === "number" ? tr.reverb : 0;
-        var delayAmt = typeof tr.delay === "number" ? tr.delay : 0;
         var semi = typeof tr.semitones === "number" ? tr.semitones : 0;
         var bal = typeof tr.balance === "number" ? tr.balance : 0;
         // Slider max: at least timeline length, current offset, 60s
@@ -1570,40 +1462,19 @@
           '">' +
           Math.round(vol * 100) +
           "%</span></label>" +
-          '<div class="amx-slider-lab amx-offset-lab" title="Start timeline — akurasi 1 ms">' +
+          '<label class="amx-slider-lab amx-offset-lab" title="Waktu mulai">' +
           '<input type="text" class="amx-off-input" data-act="off-text" data-i="' +
           idx +
           '" value="' +
           fmt(offSec) +
-          '" inputmode="decimal" aria-label="Start m:ss.mmm">' +
-          " Start " +
-          '<span class="amx-nudge">' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="-100" title="-100 ms">−−</button>' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="-10" title="-10 ms">−10</button>' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="-1" title="-1 ms">−1</button>' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="1" title="+1 ms">+1</button>' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="10" title="+10 ms">+10</button>' +
-          '<button type="button" class="amx-nudge-btn" data-act="nudge" data-i="' +
-          idx +
-          '" data-ms="100" title="+100 ms">+100</button>' +
-          "</span>" +
-          '<input type="range" min="0" max="' +
+          '" inputmode="numeric" aria-label="Waktu mulai">' +
+          ' Start <input type="range" min="0" max="' +
           offMax +
-          '" step="0.001" value="' +
-          Number(offSec).toFixed(3) +
+          '" step="0.1" value="' +
+          offSec.toFixed(1) +
           '" data-act="off" data-i="' +
           idx +
-          '"></div>' +
+          '"></label>' +
           '<label class="amx-slider-lab" title="Reverb">Rev <input type="range" min="0" max="100" value="' +
           Math.round(rev * 100) +
           '" data-act="rev" data-i="' +
@@ -1612,15 +1483,6 @@
           idx +
           '">' +
           Math.round(rev * 100) +
-          "%</span></label>" +
-          '<label class="amx-slider-lab" title="Delay / Echo">Dly <input type="range" min="0" max="100" value="' +
-          Math.round(delayAmt * 100) +
-          '" data-act="dly" data-i="' +
-          idx +
-          '"><span data-amx-dlyval="' +
-          idx +
-          '">' +
-          Math.round(delayAmt * 100) +
           "%</span></label>" +
           "</div>" +
           '<div class="amx-track-col-r">' +
@@ -1708,7 +1570,6 @@
         offset: Math.max(0, offsetSec || 0),
         volume: 1,
         reverb: 0,
-          delay: 0,
         semitones: 0,
         refTrack: -1,
         expanded: false,
@@ -1980,15 +1841,11 @@
       master.gain.value = masterGain;
       master.connect(offline.destination);
       var conv = null;
-      if (!opts.mono && tail > 0.15) {
-        conv = createAlgoReverb(offline, {
-          feedback: 0.58,
-          dampHz: 2800,
-          combGain: 0.13,
-          earlyGain: 0.18,
-          airHz: 5200,
-        });
-        conv.output.connect(master);
+      if (!opts.mono && tail > 0.2) {
+        var impulse = makeImpulse(offline, 1.4, 2.4);
+        conv = offline.createConvolver();
+        conv.buffer = impulse;
+        conv.connect(master);
       }
 
       active.forEach(function (t) {
@@ -2027,27 +1884,9 @@
         }
         if (conv && rev > 0.01) {
           var wet = offline.createGain();
-          wet.gain.value = vol * Math.min(0.65, rev);
+          wet.gain.value = vol * rev;
           src.connect(wet);
-          wet.connect(conv.input);
-        }
-        var dlyO = typeof t.delay === "number" ? t.delay : 0;
-        if (dlyO > 0.01) {
-          var dNode = offline.createDelay(1.0);
-          dNode.delayTime.value = 0.25;
-          var dFb = offline.createGain();
-          dFb.gain.value = 0.25 + 0.4 * Math.min(1, dlyO);
-          var dW = offline.createGain();
-          dW.gain.value = vol * Math.min(0.9, dlyO) * 0.75;
-          var dLp = offline.createBiquadFilter();
-          dLp.type = "lowpass";
-          dLp.frequency.value = 4200;
-          src.connect(dW);
-          dW.connect(dNode);
-          dNode.connect(dLp);
-          dLp.connect(dFb);
-          dFb.connect(dNode);
-          dLp.connect(master);
+          wet.connect(conv);
         }
         try {
           src.start(when, offsetInBuffer, len);
@@ -2600,16 +2439,6 @@
         applyHarmonySuggestion(Number(t.getAttribute("data-i")), "s3dn");
         return;
       }
-      if (act === "nudge") {
-        var ni = Number(t.getAttribute("data-i"));
-        var ms = Number(t.getAttribute("data-ms")) || 0;
-        if (tracks[ni] && ms) {
-          var next = (tracks[ni].offset || 0) + ms / 1000;
-          if (next < 0) next = 0;
-          applyOffset(ni, next, { status: true });
-        }
-        return;
-      }
       if (act === "mute") {
         var i = Number(t.getAttribute("data-i"));
         if (tracks[i]) {
@@ -3120,11 +2949,13 @@
         var lab2 = root.querySelector('[data-amx-revval="' + i + '"]');
         if (lab2) lab2.textContent = Math.round(tracks[i].reverb * 100) + "%";
         applyLiveVolumes();
-      } else if (act === "dly") {
-        tracks[i].delay = Number(t.value) / 100;
-        var labD = root.querySelector('[data-amx-dlyval="' + i + '"]');
-        if (labD) labD.textContent = Math.round(tracks[i].delay * 100) + "%";
-        applyLiveVolumes();
+        // jika reverb baru diaktifkan saat play, live graph mungkin belum punya wet — restart play
+        if (isPlaying && !isRecording && tracks[i].reverb > 0.01) {
+          var head = currentPlayhead();
+          stopPlayback(true);
+          playhead = head;
+          playAll();
+        }
       } else if (act === "off") {
         applyOffset(i, Number(t.value), {
           fromRange: true,
