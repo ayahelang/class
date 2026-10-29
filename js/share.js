@@ -2,15 +2,19 @@
  * Tombol bagikan gallery via WhatsApp & Gmail
  */
 (function () {
-  const SHARE_URL = "https://webgal.silverhawk.web.id/";
+  const SHARE_URL = "https://class.silverhawk.web.id/";
   const SHARE_TITLE = "Silverhawk Student Web Gallery";
   const SHARE_TEXT =
     "Lihat karya website santriwati di Silverhawk Student Web Gallery — portfolio digital, video, dan apresiasi karya.";
 
   function build() {
-    if (document.getElementById("sh-share-bar")) return;
-    const bar = document.createElement("div");
-    bar.id = "sh-share-bar";
+    let bar = document.getElementById("sh-share-bar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "sh-share-bar";
+      document.body.appendChild(bar);
+    }
+    if (!bar.querySelector(".sh-wa")) {
     bar.innerHTML = `
       <span class="sh-share-label">Bagikan</span>
       <a class="sh-share-btn sh-wa" href="#" target="_blank" rel="noopener" title="Bagikan via WhatsApp" aria-label="WhatsApp">
@@ -22,7 +26,7 @@
         Email
       </a>
     `;
-    document.body.appendChild(bar);
+    }
 
     const pageUrl = location.href.split("#")[0];
     const text = SHARE_TEXT + "\n" + pageUrl;
