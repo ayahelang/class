@@ -1,1 +1,1 @@
-class: same ann schedule updates
+edit jump, status reset, alarm fill, today btn
