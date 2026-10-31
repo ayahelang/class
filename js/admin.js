@@ -819,6 +819,13 @@
           f.querySelector("[name=schedule_hours]").value = (r.schedule_hours || []).join(",");
           setAnnScheduleDays(f, r.schedule_days || []);
           f.querySelector("[name=splash_seconds]").value = r.splash_seconds || 15;
+
+          if (f.querySelector("[name=is_alarm]")) f.querySelector("[name=is_alarm]").checked = !!r.is_alarm;
+          var delay = Number(r.alarm_delay_sec) || 0;
+          if (f.querySelector("[name=alarm_min]")) f.querySelector("[name=alarm_min]").value = Math.floor(delay / 60);
+          if (f.querySelector("[name=alarm_sec]")) f.querySelector("[name=alarm_sec]").value = delay % 60;
+          var box = document.getElementById("annAlarmSettings");
+          if (box) box.style.display = r.is_alarm ? "grid" : "none";
           f.querySelector("[name=active]").checked = r.active !== false;
           $("#annStatus").textContent = "Mode duplikat: simpan untuk membuat pengumuman baru · " + (r.title || "");
           scrollToForm("#annForm");
@@ -890,6 +897,13 @@
           f.querySelector("[name=schedule_hours]").value = (r.schedule_hours || []).join(",");
           setAnnScheduleDays(f, r.schedule_days || []);
           f.querySelector("[name=splash_seconds]").value = r.splash_seconds || 15;
+
+          if (f.querySelector("[name=is_alarm]")) f.querySelector("[name=is_alarm]").checked = !!r.is_alarm;
+          var delay = Number(r.alarm_delay_sec) || 0;
+          if (f.querySelector("[name=alarm_min]")) f.querySelector("[name=alarm_min]").value = Math.floor(delay / 60);
+          if (f.querySelector("[name=alarm_sec]")) f.querySelector("[name=alarm_sec]").value = delay % 60;
+          var box = document.getElementById("annAlarmSettings");
+          if (box) box.style.display = r.is_alarm ? "grid" : "none";
           f.querySelector("[name=active]").checked = r.active !== false;
           $("#annStatus").textContent = "Mode edit: " + (r.title || "");
           scrollToForm("#annForm");
@@ -1255,11 +1269,48 @@
         schedule_hours: hoursRaw,
         schedule_days: readAnnScheduleDays(f),
         splash_seconds: Number(fd.get("splash_seconds")) || 15,
+        is_alarm: !!(f.querySelector("[name=is_alarm]") && f.querySelector("[name=is_alarm]").checked),
+        alarm_min: Number((f.querySelector("[name=alarm_min]") || {}).value) || 0,
+        alarm_sec: Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0,
+        alarm_delay_sec:
+          (Number((f.querySelector("[name=alarm_min]") || {}).value) || 0) * 60 +
+          (Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0),
         active: f.querySelector("[name=active]").checked,
       };
       try {
-        await GalleryDB.upsertAnnouncement(payload);
-        $("#annStatus").textContent = "Pengumuman disimpan.";
+        const saved = await GalleryDB.upsertAnnouncement(payload);
+        $("#annStatus").textContent = payload.is_alarm
+          ? "Pengumuman alarm disimpan · hitung mundur aktif."
+          : "Pengumuman disimpan.";
+        try {
+          if (payload.is_alarm) {
+            const delaySec =
+              (Number(payload.alarm_min) || 0) * 60 + (Number(payload.alarm_sec) || 0);
+            const localAnn = Object.assign({}, saved || {}, {
+              is_alarm: true,
+              active: true,
+              alarm_delay_sec: delaySec,
+              alarm_fire_at:
+                (saved && saved.alarm_fire_at) ||
+                new Date(Date.now() + delaySec * 1000).toISOString(),
+              splash_seconds: Number(payload.splash_seconds) || 15,
+              title: payload.title,
+              body_html: payload.body_html,
+              id: (saved && saved.id) || payload.id,
+            });
+            try {
+              sessionStorage.removeItem("sh_alarm_closed_" + localAnn.id);
+            } catch (e0) {}
+            if (window.SHAnnounce && typeof SHAnnounce.tickAlarmFloat === "function") {
+              SHAnnounce.tickAlarmFloat(localAnn);
+            }
+            try {
+              if (window.__shAnnBc) window.__shAnnBc.postMessage({ type: "alarm-saved", ann: localAnn });
+            } catch (e1) {}
+          }
+        } catch (eAnn) {
+          console.warn("tampilkan alarm", eAnn);
+        }
         f.reset();
         f.querySelector("[name=id]").value = "";
         $("#annEditor").innerHTML = "";
@@ -4381,4 +4432,17 @@
 
 
   boot();
+
+  // Alarm settings toggle
+  (function bindAnnAlarmToggle() {
+    var cb = document.getElementById("annIsAlarm");
+    var box = document.getElementById("annAlarmSettings");
+    if (!cb || !box) return;
+    function sync() {
+      box.style.display = cb.checked ? "grid" : "none";
+    }
+    cb.addEventListener("change", sync);
+    sync();
+  })();
+
 })();

@@ -2,6 +2,37 @@
 (function () {
   const LS_PREFIX = "sh_ann_seen_";
 
+  function stripHtml(html) {
+    var d = document.createElement("div");
+    d.innerHTML = html || "";
+    return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim();
+  }
+
+  function speakAnnouncement(ann) {
+    try {
+      if (!window.speechSynthesis) return;
+      var text = (ann.title || "Pengingat") + ". " + stripHtml(ann.body_html || "");
+      if (!text.trim()) return;
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text.slice(0, 600));
+      u.lang = "id-ID";
+      u.rate = 0.95;
+      u.pitch = 1;
+      // prefer Indonesian voice if available
+      try {
+        var voices = window.speechSynthesis.getVoices() || [];
+        var idv = voices.find(function (v) {
+          return /id/i.test(v.lang);
+        });
+        if (idv) u.voice = idv;
+      } catch (e) {}
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      console.warn("TTS", e);
+    }
+  }
+
+
   function pageKind() {
     const p = (location.pathname.split("/").pop() || "index.html").toLowerCase();
     if (!p || p === "/" || p === "index.html") return "home";
@@ -9,6 +40,525 @@
     if (p === "my-works.html" || p === "profile.html" || p === "chat.html") return "user_panel";
     return "other";
   }
+
+
+  function ensureAlarmCss() {
+    if (document.getElementById("sh-alarm-css")) return;
+    var s = document.createElement("style");
+    s.id = "sh-alarm-css";
+    s.textContent = [
+      ".sh-alarm-float{position:fixed;z-index:99980;width:min(320px,calc(100vw - 24px));",
+      "background:linear-gradient(165deg,#1a2740,#101820);border:1px solid rgba(255,180,60,.45);",
+      "border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.45);color:#e8eef7;",
+      "font:13px/1.4 system-ui,sans-serif;user-select:none;overflow:hidden}",
+      ".sh-alarm-float.is-min{width:auto;min-width:140px}",
+      ".sh-alarm-float.is-min .sh-alarm-body{display:none}",
+      ".sh-alarm-hd{display:flex;align-items:center;gap:8px;padding:8px 10px;",
+      "background:linear-gradient(135deg,rgba(60,40,10,.9),rgba(20,30,40,.95));",
+      "cursor:grab;border-bottom:1px solid rgba(255,180,60,.2)}",
+      ".sh-alarm-hd:active{cursor:grabbing}",
+      ".sh-alarm-title{flex:1;font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".sh-alarm-hd button{border:0;background:rgba(255,255,255,.08);color:#cde;border-radius:6px;",
+      "width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1}",
+      ".sh-alarm-hd button:hover{background:rgba(255,200,80,.25);color:#fff}",
+      ".sh-alarm-body{padding:12px 14px 14px}",
+      ".sh-alarm-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}",
+      ".sh-alarm-meta{flex:1;min-width:0}",
+      ".sh-alarm-btn{border:0;background:rgba(255,255,255,.08);color:#cde;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1}",
+      ".sh-alarm-btn:hover{background:rgba(255,200,80,.25);color:#fff}",
+      ".sh-alarm-msg{margin-top:8px;font-size:12px;color:#c5d4e6;max-height:120px;overflow:auto;line-height:1.45;border-top:1px solid rgba(255,180,60,.15);padding-top:8px}",
+      ".sh-alarm-float.is-min .sh-alarm-body{display:none}",
+      ".sh-alarm-float.is-min{width:auto;min-width:168px}",".sh-alarm-float.is-min .sh-alarm-hd{gap:6px}",".sh-alarm-btn[data-act=max]{font-size:13px;font-weight:700}",".sh-alarm-btn.is-hidden{display:none!important}",".sh-alarm-btn{display:inline-flex!important;align-items:center;justify-content:center}",
+      ".sh-alarm-float.is-min .sh-alarm-title:after{content:' (ketuk 2× / buka kembali)';font-weight:500;opacity:.75;font-size:10px}",
+
+      ".sh-alarm-hg-frame,.sh-alarm-hg-sand-top,.sh-alarm-hg-sand-bot,.sh-alarm-hg-stream{",
+      "animation-duration:var(--sh-hg-dur,3s)!important}",
+      ".sh-alarm-hg{width:56px;height:72px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center}",
+      ".sh-alarm-hg-frame{position:relative;width:36px;height:64px;",
+      "animation:shHgRotate var(--sh-hg-dur,3s) ease-in-out 1 forwards;transform-origin:center center}",
+      ".sh-alarm-hg-top,.sh-alarm-hg-bot{position:absolute;left:0;width:36px;height:28px;",
+      "border:2px solid rgba(255,200,100,.85);background:rgba(20,30,45,.55);overflow:hidden}",
+      ".sh-alarm-hg-top{top:0;border-radius:4px 4px 18px 18px;border-bottom-color:transparent}",
+      ".sh-alarm-hg-bot{bottom:0;border-radius:18px 18px 4px 4px;border-top-color:transparent}",
+      ".sh-alarm-hg-neck{position:absolute;left:50%;top:26px;width:4px;height:12px;margin-left:-2px;",
+      "background:rgba(255,200,100,.5)}",
+      ".sh-alarm-hg-sand-top{position:absolute;left:4px;right:4px;top:4px;height:20px;",
+      "background:linear-gradient(#ffc46a,#e8a040);border-radius:2px 2px 50% 50%;",
+      "animation:shHgSandTop var(--sh-hg-dur,3s) linear 1 forwards;transform-origin:center bottom}",
+      ".sh-alarm-hg-sand-bot{position:absolute;left:8px;right:8px;bottom:4px;height:0;",
+      "background:linear-gradient(#e8a040,#ffc46a);border-radius:50% 50% 2px 2px;",
+      "animation:shHgSandBot var(--sh-hg-dur,3s) linear 1 forwards}",
+      ".sh-alarm-hg-stream{position:absolute;left:50%;top:28px;width:2px;height:12px;margin-left:-1px;",
+      "background:repeating-linear-gradient(to bottom,#ffc46a 0 2px,transparent 2px 4px);",
+      "opacity:.85;animation:shHgStream var(--sh-hg-dur,3s) linear 1 forwards}",
+      "@keyframes shHgSandTop{0%{height:20px;opacity:1}70%{height:2px;opacity:.9}85%,100%{height:0;opacity:0}}",
+      "@keyframes shHgSandBot{0%{height:0}70%{height:4px}100%{height:18px}}",
+      "@keyframes shHgStream{0%,85%{opacity:.9}90%,100%{opacity:0}}",
+      "@keyframes shHgRotate{0%,92%{transform:rotate(0deg)}100%{transform:rotate(180deg)}}",
+      ".sh-alarm-count{text-align:center;font-size:28px;font-weight:800;letter-spacing:.04em;",
+      "font-variant-numeric:tabular-nums;color:#ffc46a;text-shadow:0 0 12px rgba(255,180,60,.35)}",
+      ".sh-alarm-sub{text-align:center;font-size:11px;color:#9ab;margin-top:4px}",
+      ".sh-alarm-msg{margin-top:10px;font-size:12px;color:#c5d4e6;max-height:72px;overflow:auto}",
+      ".sh-alarm-float.is-fired{border-color:rgba(80,220,120,.55);animation:shAlarmPulse 1s ease infinite}",
+      "@keyframes shAlarmPulse{0%,100%{box-shadow:0 0 0 0 rgba(80,220,120,.4)}70%{box-shadow:0 0 0 12px rgba(80,220,120,0)}}",
+      ".sh-alarm-float.is-fired .sh-alarm-count{color:#7dffb0}",
+    ].join("");
+    document.head.appendChild(s);
+  }
+
+  var alarmTimers = {};
+  var alarmCloseTimeouts = {};
+  var alarmFired = {};
+
+  function alarmUiKey(id) {
+    return "sh_alarm_ui_" + id;
+  }
+  function loadAlarmUi(id) {
+    try {
+      return JSON.parse(localStorage.getItem(alarmUiKey(id)) || "null") || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveAlarmUi(id, data) {
+    try {
+      localStorage.setItem(alarmUiKey(id), JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function fmtCountdown(ms) {
+    if (ms < 0) ms = 0;
+    var t = Math.ceil(ms / 1000);
+    var m = Math.floor(t / 60);
+    var s = t % 60;
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  function getAlarmFireAt(ann) {
+    if (ann.alarm_fire_at) {
+      var t = new Date(ann.alarm_fire_at).getTime();
+      if (isFinite(t) && t > 0) return t;
+    }
+    var delay = Number(ann.alarm_delay_sec);
+    if (!isFinite(delay) || delay < 0) delay = 0;
+    var base = ann.updated_at || ann.created_at || ann.starts_at;
+    if (base) {
+      var b = new Date(base).getTime();
+      if (isFinite(b) && b > 0) return b + delay * 1000;
+    }
+    // last resort: jangan anggap "sekarang" tanpa delay (hindari langsung phase 2)
+    return Date.now() + Math.max(delay, 1) * 1000;
+  }
+
+  function getAlarmPhase2End(ann) {
+    var fireAt = getAlarmFireAt(ann);
+    var splashSec = Math.max(5, Number(ann.splash_seconds) || 15);
+    return fireAt + splashSec * 1000;
+  }
+
+  function bindAlarmDrag(panel, id) {
+    var hd = panel.querySelector(".sh-alarm-hd");
+    if (!hd) return;
+    var dragging = false;
+    var ox = 0,
+      oy = 0;
+    function onDown(ev) {
+      if (ev.target && ev.target.closest && ev.target.closest("button")) return;
+      dragging = true;
+      var r = panel.getBoundingClientRect();
+      ox = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      oy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
+      ev.preventDefault();
+    }
+    function onMove(ev) {
+      if (!dragging) return;
+      var cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      var cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      var x = Math.max(0, Math.min(window.innerWidth - 40, cx - ox));
+      var y = Math.max(0, Math.min(window.innerHeight - 40, cy - oy));
+      panel.style.left = x + "px";
+      panel.style.top = y + "px";
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+    }
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      var ui = loadAlarmUi(id);
+      ui.x = parseFloat(panel.style.left) || 0;
+      ui.y = parseFloat(panel.style.top) || 0;
+      saveAlarmUi(id, ui);
+    }
+    hd.addEventListener("mousedown", onDown);
+    hd.addEventListener("touchstart", onDown, { passive: false });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchend", onUp);
+  }
+
+  function ensureAlarmFloat(ann) {
+    ensureAlarmCss();
+    var id = String(ann.id);
+    var el = document.getElementById("sh-alarm-float-" + id);
+    if (el) return el;
+    var ui = loadAlarmUi(id);
+    el = document.createElement("div");
+    el.id = "sh-alarm-float-" + id;
+    el.className = "sh-alarm-float";
+    el.setAttribute("data-ann-id", id);
+    var left = ui.x != null ? ui.x : Math.max(12, window.innerWidth - 340);
+    var top = ui.y != null ? ui.y : 80 + (Object.keys(alarmTimers).length % 5) * 24;
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+    el.innerHTML =
+      '<div class="sh-alarm-hd">' +
+      '<span class="sh-alarm-title"></span>' +
+      '<button type="button" class="sh-alarm-btn" data-act="min" title="Perkecil">–</button>' +
+      '<button type="button" class="sh-alarm-btn" data-act="max" title="Perbesar" hidden>□</button>' +
+      '<button type="button" class="sh-alarm-btn" data-act="close" title="Tutup">✕</button>' +
+      "</div>" +
+      '<div class="sh-alarm-body">' +
+      '<div class="sh-alarm-row">' +
+      '<div class="sh-alarm-hg" aria-hidden="true"><div class="sh-alarm-hg-frame"><div class="sh-alarm-hg-top"></div><div class="sh-alarm-hg-neck"></div><div class="sh-alarm-hg-bot"></div><div class="sh-alarm-hg-sand-top"></div><div class="sh-alarm-hg-sand-bot"></div><div class="sh-alarm-hg-stream"></div></div></div>' +
+      '<div class="sh-alarm-meta">' +
+      '<div class="sh-alarm-count">--:--</div>' +
+      '<div class="sh-alarm-sub">Menuju baca nyaring</div>' +
+      "</div></div>" +
+      '<div class="sh-alarm-msg"></div>' +
+      "</div>";
+    el.querySelector(".sh-alarm-title").textContent =
+      "⏰ " + (ann.title || "Alarm").slice(0, 48);
+    el.querySelector(".sh-alarm-msg").textContent = stripHtml(ann.body_html || "").slice(
+      0,
+      400
+    );
+
+    function setBtnVisible(btn, on) {
+      if (!btn) return;
+      if (on) {
+        btn.classList.remove("is-hidden");
+        btn.hidden = false;
+        btn.style.display = "";
+      } else {
+        btn.classList.add("is-hidden");
+        btn.hidden = true;
+        btn.style.display = "none";
+      }
+    }
+
+    function syncMinMaxButtons() {
+      var minBtn = el.querySelector('[data-act="min"]');
+      var maxBtn = el.querySelector('[data-act="max"]');
+      var closeBtn = el.querySelector('[data-act="close"]');
+      var fired = !!alarmFired[id] || el.classList.contains("is-fired");
+      var minimized = el.classList.contains("is-min");
+      if (fired) {
+        setBtnVisible(minBtn, false);
+        setBtnVisible(maxBtn, false);
+        setBtnVisible(closeBtn, true);
+        if (closeBtn) closeBtn.title = "Tutup sepenuhnya";
+        return;
+      }
+      // Phase 1 (sama seperti admin): – saat expanded, □ saat minimized; ✕ disembunyikan
+      setBtnVisible(minBtn, !minimized);
+      setBtnVisible(maxBtn, minimized);
+      setBtnVisible(closeBtn, false);
+      if (minBtn) minBtn.title = "Perkecil";
+      if (maxBtn) maxBtn.title = "Perbesar";
+    }
+
+    function setMinimized(on) {
+      if (on) el.classList.add("is-min");
+      else el.classList.remove("is-min");
+      var u = loadAlarmUi(id);
+      u.min = !!on;
+      saveAlarmUi(id, u);
+      syncMinMaxButtons();
+    }
+
+    el.querySelector('[data-act="min"]').addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (alarmFired[id] || el.classList.contains("is-fired")) return;
+      setMinimized(true);
+    });
+    el.querySelector('[data-act="max"]').addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (alarmFired[id] || el.classList.contains("is-fired")) return;
+      setMinimized(false);
+    });
+    el.querySelector('[data-act="close"]').addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var fired = !!alarmFired[id] || el.classList.contains("is-fired");
+      if (!fired) {
+        setMinimized(true);
+        return;
+      }
+      closeAlarmTotal(id);
+      var u2 = loadAlarmUi(id);
+      u2.min = false;
+      saveAlarmUi(id, u2);
+    });
+
+    el.querySelector(".sh-alarm-title").addEventListener("click", function () {
+      if (el.classList.contains("is-min") && !alarmFired[id]) setMinimized(false);
+    });
+
+    document.body.appendChild(el);
+    if (ui.min) el.classList.add("is-min");
+    syncMinMaxButtons();
+    el._syncMinMaxButtons = syncMinMaxButtons;
+    bindAlarmDrag(el, id);
+    try {
+      if (window.SHFloatDrag)
+        SHFloatDrag.enable(el, {
+          key: "alarm-" + id,
+          handle: el.querySelector(".sh-alarm-hd"),
+        });
+    } catch (e) {}
+    return el;
+  }
+
+  /** Paksa tampil floating alarm (setelah Simpan di admin) — abaikan flag closed sesi lama */
+  function forceShowAlarm(ann) {
+    if (!ann) return;
+    ann = Object.assign({}, ann);
+    ann.is_alarm = true;
+    ann.active = true;
+    if (!ann.id) ann.id = "local-" + Date.now();
+    // pastikan fire_at ada
+    if (!ann.alarm_fire_at) {
+      var delay = Number(ann.alarm_delay_sec) || 0;
+      if (!delay && (ann.alarm_min != null || ann.alarm_sec != null)) {
+        delay = (Number(ann.alarm_min) || 0) * 60 + (Number(ann.alarm_sec) || 0);
+      }
+      ann.alarm_delay_sec = delay;
+      ann.alarm_fire_at = new Date(Date.now() + delay * 1000).toISOString();
+    }
+    try {
+      sessionStorage.removeItem("sh_alarm_closed_" + ann.id);
+    } catch (e) {}
+    // hapus panel lama jika ada agar animasi/sync ulang
+    try {
+      var aid = String(ann.id);
+      closeAlarmTotal(aid);
+      sessionStorage.removeItem("sh_alarm_closed_" + aid);
+      delete alarmFired[aid];
+    } catch (e2) {}
+    tickAlarmFloat(ann);
+  }
+
+  function clearUiInterval(id) {
+    id = String(id);
+    try {
+      if (alarmTimers[id]) clearInterval(alarmTimers[id]);
+    } catch (e) {}
+    delete alarmTimers[id];
+  }
+
+  function clearCloseTimeout(id) {
+    id = String(id);
+    try {
+      if (alarmCloseTimeouts[id]) clearTimeout(alarmCloseTimeouts[id]);
+    } catch (e) {}
+    delete alarmCloseTimeouts[id];
+  }
+
+  function clearAlarmTimers(id) {
+    clearUiInterval(id);
+    clearCloseTimeout(id);
+  }
+
+  function closeAlarmTotal(id) {
+    id = String(id);
+    clearAlarmTimers(id);
+    try {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    } catch (e4) {}
+    try {
+      var node = document.getElementById("sh-alarm-float-" + id);
+      if (node) node.remove();
+    } catch (e5) {}
+    try {
+      sessionStorage.setItem("sh_alarm_closed_" + id, "1");
+    } catch (e6) {}
+  }
+
+  /** Jadwalkan auto-close sekali per phase2End — jangan di-reset sembarangan */
+  function schedulePhase2Close(id, phase2End) {
+    id = String(id);
+    var key = id + "@" + String(phase2End);
+    if (alarmCloseTimeouts[id + "_key"] === key && alarmCloseTimeouts[id]) {
+      return; // sudah terjadwal untuk akhir yang sama
+    }
+    clearCloseTimeout(id);
+    alarmCloseTimeouts[id + "_key"] = key;
+    var ms = phase2End - Date.now();
+    if (ms < 0) ms = 0;
+    alarmCloseTimeouts[id] = setTimeout(function () {
+      closeAlarmTotal(id);
+    }, ms + 40);
+  }
+
+  function tickAlarmFloat(ann) {
+    if (!ann || ann.id == null || ann.id === "") return;
+    var id = String(ann.id);
+    if (sessionStorage.getItem("sh_alarm_closed_" + id) === "1") return;
+
+    // Normalisasi field dari server (penting untuk pengunjung / anon)
+    ann = Object.assign({}, ann);
+    ann.is_alarm = true;
+    ann.active = ann.active !== false;
+    if (ann.splash_seconds == null || ann.splash_seconds === "") {
+      ann.splash_seconds = 15;
+    }
+    ann.splash_seconds = Math.max(5, Number(ann.splash_seconds) || 15);
+    if (!ann.alarm_fire_at && ann.alarm_delay_sec != null) {
+      var base = ann.updated_at || ann.created_at || ann.starts_at;
+      if (base) {
+        ann.alarm_fire_at = new Date(
+          new Date(base).getTime() + (Number(ann.alarm_delay_sec) || 0) * 1000
+        ).toISOString();
+      }
+    }
+
+    var fireAt = getAlarmFireAt(ann);
+    var phase2End = fireAt + ann.splash_seconds * 1000;
+    if (!isFinite(fireAt) || !isFinite(phase2End)) {
+      console.warn("alarm times invalid", ann);
+      return;
+    }
+
+    var now0 = Date.now();
+    if (now0 >= phase2End) {
+      closeAlarmTotal(id);
+      return;
+    }
+
+    var el = ensureAlarmFloat(ann);
+    el.id = "sh-alarm-float-" + id;
+    el.setAttribute("data-fire-at", String(fireAt));
+    el.setAttribute("data-phase2-end", String(phase2End));
+    var countEl = el.querySelector(".sh-alarm-count");
+    var subEl = el.querySelector(".sh-alarm-sub");
+    var hg = el.querySelector(".sh-alarm-hg-frame");
+
+    if (hg && now0 < fireAt) {
+      var remain = Math.max(500, fireAt - now0);
+      if (hg.getAttribute("data-synced-for") !== String(fireAt)) {
+        el.style.setProperty("--sh-hg-dur", (remain / 1000).toFixed(2) + "s");
+        try {
+          hg.style.animation = "none";
+          void hg.offsetWidth;
+          hg.style.animation = "";
+          el.querySelectorAll(
+            ".sh-alarm-hg-sand-top,.sh-alarm-hg-sand-bot,.sh-alarm-hg-stream"
+          ).forEach(function (n) {
+            n.style.animation = "none";
+            void n.offsetWidth;
+            n.style.animation = "";
+          });
+        } catch (eHg) {}
+        hg.setAttribute("data-synced-for", String(fireAt));
+      }
+    }
+
+    function applyPhase1(msLeft) {
+      el.classList.remove("is-fired");
+      if (countEl) countEl.textContent = fmtCountdown(msLeft);
+      if (subEl) subEl.textContent = "Hitung mundur · lalu baca nyaring";
+      if (typeof el._syncMinMaxButtons === "function") el._syncMinMaxButtons();
+    }
+
+    function restartHourglass(durationMs, syncKey) {
+      if (!hg) return;
+      var remain = Math.max(500, durationMs);
+      if (hg.getAttribute("data-synced-for") === String(syncKey)) return;
+      el.style.setProperty("--sh-hg-dur", (remain / 1000).toFixed(2) + "s");
+      try {
+        var nodes = el.querySelectorAll(
+          ".sh-alarm-hg-frame,.sh-alarm-hg-sand-top,.sh-alarm-hg-sand-bot,.sh-alarm-hg-stream"
+        );
+        nodes.forEach(function (n) {
+          n.style.animation = "none";
+          void n.offsetWidth;
+          n.style.animation = "";
+        });
+      } catch (eHg) {}
+      hg.setAttribute("data-synced-for", String(syncKey));
+    }
+
+    function applyPhase2(msLeft, doSpeak) {
+      el.classList.add("is-fired");
+      el.classList.remove("is-min");
+      if (countEl) countEl.textContent = fmtCountdown(Math.max(0, msLeft));
+      if (subEl)
+        subEl.textContent =
+          "Hitung mundur tutup · " + fmtCountdown(Math.max(0, msLeft)) + " · ✕ tutup";
+      if (typeof el._syncMinMaxButtons === "function") el._syncMinMaxButtons();
+      // Jam pasir kedua: animasi + timer sinkron sisa phase 2 (splash_seconds)
+      restartHourglass(msLeft, "p2-" + String(phase2End));
+      if (doSpeak && !alarmFired[id]) {
+        alarmFired[id] = true;
+        setTimeout(function () {
+          try {
+            speakAnnouncement(ann);
+          } catch (e) {}
+          try {
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          } catch (e2) {}
+        }, 0);
+      }
+    }
+
+    function tick() {
+      if (sessionStorage.getItem("sh_alarm_closed_" + id) === "1") {
+        clearUiInterval(id);
+        return;
+      }
+      var node = document.getElementById("sh-alarm-float-" + id);
+      if (!node) {
+        clearUiInterval(id);
+        return;
+      }
+      var now = Date.now();
+      if (now < fireAt) {
+        applyPhase1(fireAt - now);
+        return;
+      }
+      // Phase 2 — selalu (admin & pengunjung)
+      if (now < phase2End) {
+        applyPhase2(phase2End - now, !alarmFired[id]);
+        return;
+      }
+      closeAlarmTotal(id);
+    }
+
+    // UI interval: boleh di-reset; close timeout: sekali per phase2End
+    clearUiInterval(id);
+    tick();
+    alarmTimers[id] = setInterval(tick, 200);
+    schedulePhase2Close(id, phase2End);
+  }
+
+  function mountAlarmAnnouncements(list, profile, kind) {
+    (list || []).forEach(function (ann) {
+      if (!ann || !ann.is_alarm || !ann.active) return;
+      // Alarm: tampil di SEMUA halaman (home, user panel, dll.)
+      // Audience: public = semua pengunjung; logged_in / students = filter target
+      if (pageKind() !== "admin") {
+        if (!matchesAudience(ann, profile)) return;
+      }
+      var phase2End = getAlarmPhase2End(ann);
+      if (Date.now() >= phase2End) return;
+      if (sessionStorage.getItem("sh_alarm_closed_" + ann.id) === "1") return;
+      tickAlarmFloat(ann);
+    });
+  }
+
 
   function inSchedule(ann, now) {
     if (!ann.active) return false;
@@ -86,9 +636,9 @@
   }
 
   function matchesAudience(ann, profile) {
-    const aud = ann.audience || "public";
-    if (aud === "public") return true;
-    if (aud === "logged_in") return !!(profile && profile.id);
+    const aud = String(ann.audience || "public").toLowerCase().trim();
+    if (!aud || aud === "public" || aud === "all" || aud === "semua") return true;
+    if (aud === "logged_in" || aud === "login") return !!(profile && profile.id);
     if (aud === "students") {
       if (!profile || !profile.linked_student_name) return false;
       const targets = ann.target_students || [];
@@ -155,7 +705,7 @@
     btn.id = "sh-ann-float-" + ann.id;
     btn.className = "sh-ann-float-btn";
     btn.title = ann.title || "Pengumuman";
-    btn.innerHTML = "<span>📢</span><span class='sh-ann-float-label'>" + (ann.title || "Pengumuman").slice(0, 28) + "</span>";
+    btn.innerHTML = "<span>" + (ann.is_alarm ? "⏰" : "📢") + "</span><span class='sh-ann-float-label'>" + (ann.title || (ann.is_alarm ? "Alarm" : "Pengumuman")).slice(0, 28) + "</span>";
     btn.onclick = () => {
       removeFloat(ann.id);
       showSplash(ann, { fromFloat: true });
@@ -194,6 +744,8 @@
           return;
         }
         if (!opts.fromFloat) markSeen(ann);
+        /* alarm: TTS hanya setelah countdown, bukan di splash */
+
         if (isStillValid(ann)) showFloatBtn(ann);
         else removeFloat(ann.id);
         resolve();
@@ -237,7 +789,6 @@
         sessionStorage.removeItem("sh_ann_force_preview");
       } catch (e2) {}
     }
-    if (pageKind() === "admin") return;
     if (!window.GalleryDB || !GalleryDB.fetchActiveAnnouncements) return;
     try {
       const list = await GalleryDB.fetchActiveAnnouncements();
@@ -249,10 +800,15 @@
       } catch (e) {}
       const kind = pageKind();
       const now = new Date();
+      // Alarm floating — juga di halaman admin (setelah simpan / refresh)
+      mountAlarmAnnouncements(list, profile, kind);
+      // Splash pengumuman biasa: tidak di admin
+      if (kind === "admin") return;
       const queue = list.filter(
         (ann) => matchesPlace(ann, kind) && matchesAudience(ann, profile) && inSchedule(ann, now)
       );
       for (const ann of queue) {
+        if (ann.is_alarm) continue;
         await showSplash(ann);
       }
     } catch (e) {
@@ -263,10 +819,87 @@
   window.SHAnnounce = {
     showSplash,
     boot,
+    mountAlarmAnnouncements,
+    tickAlarmFloat,
+    forceShowAlarm,
+    refreshAlarmsNow,
   };
 
   if (document.readyState === "complete") setTimeout(boot, 600);
   else window.addEventListener("load", () => setTimeout(boot, 600));
+
+  async function refreshAlarmsNow() {
+    if (!window.GalleryDB || !GalleryDB.fetchActiveAnnouncements) return;
+    try {
+      var list = await GalleryDB.fetchActiveAnnouncements();
+      var profile = null;
+      try {
+        var session = await GalleryDB.getSession();
+        if (session) profile = await GalleryDB.getMyProfile();
+      } catch (e) {}
+      mountAlarmAnnouncements(list, profile, pageKind());
+    } catch (e) {
+      console.warn("refreshAlarmsNow", e);
+    }
+  }
+
+  // Realtime: admin Simpan → semua browser langsung dapat event (tanpa tunggu 10 dtk)
+  (function bindAnnRealtime() {
+    function tryBind() {
+      if (!window.GalleryDB || !GalleryDB.subscribeActiveAnnouncements) {
+        setTimeout(tryBind, 800);
+        return;
+      }
+      GalleryDB.subscribeActiveAnnouncements(function (payload) {
+        var row = (payload && (payload.new || payload.old)) || null;
+        // Alarm baru / diubah → mount segera; countdown pakai alarm_fire_at absolut
+        if (row && row.is_alarm) {
+          if (payload.eventType === "DELETE" || row.active === false) {
+            try {
+              var el = document.getElementById("sh-alarm-float-" + row.id);
+              if (el) el.remove();
+              closeAlarmTotal(row.id);
+            } catch (e) {}
+            return;
+          }
+          try {
+            sessionStorage.removeItem("sh_alarm_closed_" + row.id);
+          } catch (e2) {}
+          // Pastikan fire_at ada agar sisa waktu sama di semua klien
+          if (!row.alarm_fire_at && row.alarm_delay_sec != null) {
+            var base = row.updated_at || row.created_at || new Date().toISOString();
+            row.alarm_fire_at = new Date(
+              new Date(base).getTime() + (Number(row.alarm_delay_sec) || 0) * 1000
+            ).toISOString();
+          }
+          tickAlarmFloat(row);
+        }
+        // sinkron list penuh (non-alarm + state)
+        refreshAlarmsNow();
+      });
+    }
+    tryBind();
+  })();
+
+  // Fallback lambat jika Realtime belum aktif di proyek Supabase
+  setInterval(function () {
+    refreshAlarmsNow();
+  }, 60000);
+
+  // Tab lain di browser yang sama (admin + preview)
+  try {
+    var bc = new BroadcastChannel("sh_ann_alarm");
+    bc.onmessage = function (ev) {
+      var d = ev.data || {};
+      if (d.type === "alarm-saved" && d.ann) {
+        try {
+          sessionStorage.removeItem("sh_alarm_closed_" + d.ann.id);
+        } catch (e) {}
+        tickAlarmFloat(d.ann);
+      }
+    };
+    window.__shAnnBc = bc;
+  } catch (e) {}
 
   function fmtAnnClock(sec) {
     if (!isFinite(sec) || sec < 0) return "--:--";
