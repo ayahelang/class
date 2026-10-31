@@ -298,6 +298,15 @@
           <label class="check" style="align-self:center"><input type="checkbox" name="require_checkout" checked> Wajib check-out</label>
           <label class="check" style="align-self:center"><input type="checkbox" name="allow_late"> Izinkan absen terlambat</label>
           <label class="check ann-active-align"><input type="checkbox" name="active" checked> Aktif</label>
+            <label class="check" style="grid-column:1/-1"><input type="checkbox" name="is_alarm" id="annIsAlarm" value="1"> <b>⏰ Alarm bersuara</b> — hitung mundur lalu TTS baca judul &amp; isi</label>
+            <div id="annAlarmSettings" class="ann-alarm-settings" style="grid-column:1/-1;display:none;gap:10px;padding:10px 12px;border:1px solid rgba(255,180,60,.35);border-radius:10px;background:rgba(40,28,8,.35)">
+              <div style="font-size:12px;font-weight:700;color:#ffc46a">⏱ Setelan alarm</div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+                <label class="field" style="margin:0"><span>Menit</span><input type="number" name="alarm_min" id="annAlarmMin" min="0" max="1440" value="1" style="width:88px"></label>
+                <label class="field" style="margin:0"><span>Detik</span><input type="number" name="alarm_sec" id="annAlarmSec" min="0" max="59" value="0" style="width:88px"></label>
+                <small class="muted" style="flex:1;min-width:160px">Hitung mundur (jam pasir 1) → TTS + hitung mundur tutup (jam pasir 2 = durasi splash).</small>
+              </div>
+            </div>
           <label class="field" style="grid-column:1/-1"><span>Pesan popup check-in (tepat waktu) — opsional</span>
             <input name="msg_checkin_ontime" maxlength="280" placeholder="Kosong = default: Terima kasih sudah hadir tepat waktu.">
           </label>
