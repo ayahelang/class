@@ -28,8 +28,20 @@
   async function refresh() {
     const auth = await canTeach();
     if (auth.session && auth.session.user) {
-      userbar.textContent = auth.email || auth.session.user.email;
-      document.getElementById("btnLogin").hidden = true;
+      (function(){
+        var u = (auth.session && auth.session.user) || {};
+        var meta = u.user_metadata || {};
+        var email = auth.email || u.email || "";
+        var name = meta.full_name || meta.name || (email ? email.split("@")[0] : "User");
+        var avatar = meta.avatar_url || meta.picture || "";
+        userbar.innerHTML = (avatar
+          ? '<img class="userchip-avatar" src="' + String(avatar).replace(/"/g, "") + '" alt="" referrerpolicy="no-referrer">'
+          : '<span class="userchip-fallback">👤</span>') +
+          '<span class="userchip-meta"><b>' + String(name).replace(/</g,"") + '</b><small>' + String(email).replace(/</g,"") + '</small></span>';
+        userbar.classList.add("is-logged-in");
+        var bl = document.getElementById("btnLogin");
+        if (bl) { bl.hidden = true; bl.style.display = "none"; }
+      })();
       document.getElementById("btnLogout").hidden = false;
     } else {
       userbar.textContent = "Belum login";
@@ -262,6 +274,7 @@
     };
   }
 
+  try{ if(window.ClassDB&&ClassDB.onAuthStateChange){ ClassDB.onAuthStateChange(function(){ try{ refreshAuth&&refreshAuth(); }catch(e){ location.reload(); } }); } }catch(e){}
   document.getElementById("btnLogin").onclick = function () {
     ClassDB.signInWithGoogle().catch(function (e) {
       setStatus(e.message || String(e));

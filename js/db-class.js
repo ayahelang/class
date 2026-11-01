@@ -46,6 +46,21 @@
     if (sb) await sb.auth.signOut();
   }
 
+  function onAuthStateChange(cb) {
+    const sb = client();
+    if (!sb || typeof cb !== "function") return function () {};
+    const { data } = sb.auth.onAuthStateChange(function (event, session) {
+      try {
+        cb(event, session);
+      } catch (e) {}
+    });
+    return function () {
+      try {
+        data.subscription.unsubscribe();
+      } catch (e) {}
+    };
+  }
+
   function isAdminEmail(email) {
     const list = (cfg().adminEmails || []).map(function (e) {
       return String(e || "").toLowerCase();
@@ -353,6 +368,7 @@
     client,
     getSession,
     signInWithGoogle,
+    onAuthStateChange,
     signOut,
     isAdminEmail,
     getMyProfile,

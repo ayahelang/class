@@ -13,14 +13,47 @@
   async function refreshUser() {
     const session = await ClassDB.getSession();
     if (session && session.user) {
-      const email = session.user.email || "";
-      userbar.textContent = email;
-      btnLogin.hidden = true;
-      btnLogout.hidden = false;
+      const u = session.user;
+      const meta = u.user_metadata || {};
+      const email = u.email || "";
+      const name = meta.full_name || meta.name || (email ? email.split("@")[0] : "User");
+      const avatar = meta.avatar_url || meta.picture || "";
+      if (userbar) {
+        userbar.innerHTML =
+          (avatar
+            ? '<img class="userchip-avatar" src="' + escapeHtml(avatar) + '" alt="" referrerpolicy="no-referrer">'
+            : '<span class="userchip-fallback" aria-hidden="true">👤</span>') +
+          '<span class="userchip-meta"><b>' +
+          escapeHtml(name) +
+          "</b><small>" +
+          escapeHtml(email) +
+          "</small></span>";
+        userbar.classList.add("is-logged-in");
+      }
+      if (btnLogin) {
+        btnLogin.hidden = true;
+        btnLogin.style.display = "none";
+        btnLogin.setAttribute("aria-hidden", "true");
+      }
+      if (btnLogout) {
+        btnLogout.hidden = false;
+        btnLogout.style.display = "";
+        btnLogout.removeAttribute("aria-hidden");
+      }
     } else {
-      userbar.textContent = "Belum login";
-      btnLogin.hidden = false;
-      btnLogout.hidden = true;
+      if (userbar) {
+        userbar.textContent = "Belum login";
+        userbar.classList.remove("is-logged-in");
+      }
+      if (btnLogin) {
+        btnLogin.hidden = false;
+        btnLogin.style.display = "";
+        btnLogin.removeAttribute("aria-hidden");
+      }
+      if (btnLogout) {
+        btnLogout.hidden = true;
+        btnLogout.style.display = "none";
+      }
     }
   }
 
@@ -94,4 +127,18 @@
   }
 
   refreshUser().then(loadCourses);
+  try {
+    if (window.ClassDB && ClassDB.onAuthStateChange) {
+      ClassDB.onAuthStateChange(function () {
+        refreshUser();
+      });
+    }
+  } catch (e) {}
+  // OAuth hash/query kadang butuh jeda singkat
+  setTimeout(function () {
+    refreshUser();
+  }, 600);
+  setTimeout(function () {
+    refreshUser();
+  }, 2000);
 })();
