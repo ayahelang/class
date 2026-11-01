@@ -5331,3 +5331,91 @@ input.amx-off-input{
 .theme-toggle{min-width:72px;min-height:32px}
 .topbar{min-height:56px;box-sizing:border-box}
 img,video{max-width:100%;height:auto}
+
+
+/* === Tree peserta (absensi/ann/chat) — rapi mobile & desktop === */
+.pt-node,.sh-cb-tree .pt-node{width:100%;max-width:100%;box-sizing:border-box}
+.pt-row,.sh-cb-row,.sh-stu-row{
+  display:flex !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  gap:8px !important;
+  width:100% !important;
+  max-width:100%;
+  box-sizing:border-box;
+  padding:6px 4px !important;
+  justify-content:flex-start !important;
+}
+.pt-toggle,.sh-cb-toggle{
+  flex:0 0 auto !important;
+  width:28px;height:28px;min-width:28px;
+}
+.pt-row > .sh-cb-label,
+.sh-cb-row > .sh-cb-label,
+.pt-row label.sh-cb-label{
+  display:flex !important;
+  flex:1 1 auto !important;
+  flex-direction:row !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  gap:6px !important;
+  min-width:0 !important;
+  margin:0 !important;
+  max-width:100%;
+}
+.pt-row .sh-cb-label input[type=checkbox],
+.sh-cb-row input[type=checkbox]{
+  flex:0 0 auto !important;
+}
+.pt-row .sh-cb-label strong,
+.pt-row > strong,
+.sh-cb-row strong{
+  flex:1 1 auto !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:13px;
+}
+/* jumlah anggota: selalu di kanan baris */
+.pt-row .sh-cb-label .muted,
+.pt-row .sh-cb-label small.muted,
+.pt-row > .muted,
+.pt-row > small.muted,
+.pt-row .pt-count,
+.sh-cb-label small{
+  margin-left:auto !important;
+  flex:0 0 auto !important;
+  white-space:nowrap !important;
+  font-size:12px !important;
+  color:var(--muted,#7a96a4) !important;
+}
+.sh-cb-row.leaf{
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  gap:8px !important;
+  width:100%;
+  padding:4px 4px 4px 8px;
+}
+.sh-cb-row.leaf span{
+  flex:1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.pt-children{
+  margin-left:12px;
+  padding-left:8px;
+  border-left:1px solid rgba(125,227,255,.12);
+  max-width:100%;
+  box-sizing:border-box;
+}
+@media (max-width:640px){
+  .pt-children{margin-left:8px;padding-left:6px}
+  .pt-row,.sh-cb-row{padding:8px 2px !important;gap:6px !important}
+  .pt-row .sh-cb-label strong,.pt-row > strong{font-size:12.5px}
+  .pt-row .sh-cb-label .muted,.pt-row .pt-count{font-size:11px !important}
+}
