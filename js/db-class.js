@@ -87,6 +87,28 @@
     return data;
   }
 
+  async function deleteCourse(id) {
+    const sb = client();
+    if (!sb) throw new Error("Supabase belum dikonfigurasi");
+    const { error } = await sb.from("classroom_courses").delete().eq("id", id);
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  }
+  async function deleteModule(id) {
+    const sb = client();
+    const { error } = await sb.from("classroom_modules").delete().eq("id", id);
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  }
+  async function deleteMaterial(id) {
+    const sb = client();
+    const { error } = await sb.from("classroom_materials").delete().eq("id", id);
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  }
+  async function deleteAssignment(id) {
+    const sb = client();
+    const { error } = await sb.from("classroom_assignments").delete().eq("id", id);
+    if (error) throw new Error(error.message || JSON.stringify(error));
+  }
+
   async function upsertCourse(row) {
     const sb = client();
     if (!sb) throw new Error("DB belum siap");
@@ -337,6 +359,10 @@
     listCourses,
     getCourse,
     upsertCourse,
+    deleteCourse,
+    deleteModule,
+    deleteMaterial,
+    deleteAssignment,
     listModules,
     upsertModule,
     listMaterials,

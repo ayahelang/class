@@ -81,6 +81,8 @@
         '<a class="btn btn-sm" href="classroom-course.html?id=' +
         encodeURIComponent(c.id) +
         '">Lihat sebagai siswa</a>' +
+        '<button type="button" class="btn btn-sm" data-edit-course="' + c.id + '">Ubah</button>' +
+        '<button type="button" class="btn btn-sm" data-del-course="' + c.id + '" style="color:#f88">Hapus</button>' +
         "</div>";
       host.appendChild(el);
     });
@@ -93,6 +95,30 @@
       }
       if (asgBtn) {
         openAssignments(asgBtn.getAttribute("data-asg"), asgBtn.getAttribute("data-title"));
+      }
+      const editC = ev.target.closest("[data-edit-course]");
+      if (editC) {
+        const id = editC.getAttribute("data-edit-course");
+        const row = rows.find(function (x) { return String(x.id) === String(id); });
+        if (!row) return;
+        document.getElementById("cTitle").value = row.title || "";
+        document.getElementById("cCode").value = row.code || "";
+        document.getElementById("cDesc").value = row.description || "";
+        if (document.getElementById("cActive")) document.getElementById("cActive").checked = row.active !== false;
+        document.getElementById("cEditId") && (document.getElementById("cEditId").value = row.id);
+        setStatus("Mode ubah course — simpan untuk memperbarui.");
+        document.getElementById("cTitle").scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      const delC = ev.target.closest("[data-del-course]");
+      if (delC) {
+        if (!confirm("Hapus course ini beserta modul/materi terkait?")) return;
+        try {
+          await ClassDB.deleteCourse(delC.getAttribute("data-del-course"));
+          setStatus("Course dihapus.");
+          await loadAdminCourses(auth);
+        } catch (e) {
+          setStatus(e.message || String(e));
+        }
       }
     };
   }
@@ -114,13 +140,27 @@
         m.id +
         '" data-mtitle="' +
         esc(m.title) +
-        '">Materi</button>';
+        '">Materi</button> <button type="button" class="btn btn-sm" data-del-mod="' +
+        m.id +
+        '">Hapus</button>';
       ul.appendChild(li);
     });
-    ul.onclick = function (ev) {
+    ul.onclick = async function (ev) {
       const b = ev.target.closest("[data-open-mat]");
-      if (!b) return;
-      openMaterials(b.getAttribute("data-open-mat"), b.getAttribute("data-mtitle"));
+      if (b) {
+        openMaterials(b.getAttribute("data-open-mat"), b.getAttribute("data-mtitle"));
+        return;
+      }
+      const d = ev.target.closest("[data-del-mod]");
+      if (d) {
+        if (!confirm("Hapus modul ini?")) return;
+        try {
+          await ClassDB.deleteModule(d.getAttribute("data-del-mod"));
+          openModules(courseId, title);
+        } catch (e) {
+          setStatus(e.message || String(e));
+        }
+      }
     };
   }
 
@@ -133,9 +173,26 @@
     ul.innerHTML = "";
     mats.forEach(function (m) {
       const li = document.createElement("li");
-      li.textContent = m.title + " (" + m.material_type + ")";
+      li.innerHTML =
+        esc(m.title) +
+        " (" +
+        esc(m.material_type) +
+        ') <button type="button" class="btn btn-sm" data-del-mat="' +
+        m.id +
+        '">Hapus</button>';
       ul.appendChild(li);
     });
+    ul.onclick = async function (ev) {
+      const d = ev.target.closest("[data-del-mat]");
+      if (!d) return;
+      if (!confirm("Hapus materi ini?")) return;
+      try {
+        await ClassDB.deleteMaterial(d.getAttribute("data-del-mat"));
+        openMaterials(moduleId, title);
+      } catch (e) {
+        setStatus(e.message || String(e));
+      }
+    };
   }
 
   async function openAssignments(courseId, title) {
@@ -154,7 +211,9 @@
         esc(a.title) +
         "</strong> · " +
         subs.length +
-        " pengumpulan" +
+        ' pengumpulan <button type="button" class="btn btn-sm" data-del-asg="' +
+        a.id +
+        '">Hapus tugas</button>' +
         '<div style="margin-top:6px">' +
         subs
           .map(function (s) {
@@ -219,15 +278,22 @@
     if (!title) return setStatus("Judul wajib");
     const session = await ClassDB.getSession();
     try {
+      const editId = (document.getElementById("cEditId") || {}).value || null;
       await ClassDB.upsertCourse({
+        id: editId || undefined,
         title: title,
         code: document.getElementById("cCode").value.trim(),
         description: document.getElementById("cDesc").value.trim(),
         teacher_user_id: session.user.id,
-        teacher_name: session.user.email,
+        teacher_name:
+          (document.getElementById("cTeacher") && document.getElementById("cTeacher").value.trim()) ||
+          session.user.email,
+        active: document.getElementById("cActive") ? document.getElementById("cActive").checked : true,
       });
-      setStatus("Course disimpan");
+      setStatus(editId ? "Course diperbarui" : "Course disimpan");
       document.getElementById("cTitle").value = "";
+      if (document.getElementById("cEditId")) document.getElementById("cEditId").value = "";
+      if (document.getElementById("cTeacher")) document.getElementById("cTeacher").value = "";
       refresh();
     } catch (e) {
       setStatus(e.message || String(e));
