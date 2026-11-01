@@ -488,7 +488,7 @@
             return `<div class="pt-node">
               <div class="pt-row sh-cb-row">
                 <button type="button" class="pt-toggle sh-cb-toggle" data-t="stu-${esc(y)}-${esc(c)}">▸</button>
-                <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <strong>Kelas ${esc(c)}</strong> <small class="muted">(${names.length})</small></label>
+                <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${names.length})</small></label>
               </div>
               <div class="pt-children is-collapsed" data-sh-children data-parent="stu-${esc(y)}-${esc(c)}">${nHtml}</div>
             </div>`;
@@ -497,7 +497,7 @@
         return `<div class="pt-node">
           <div class="pt-row sh-cb-row">
             <button type="button" class="pt-toggle sh-cb-toggle" data-t="stu-y-${esc(y)}">▾</button>
-            <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <strong>Angkatan ${esc(y)}</strong> <small class="muted">(${totalY})</small></label>
+            <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <span class="sh-cb-text"><strong>Angkatan ${esc(y)}</strong></span><small class="sh-cb-count muted">(${totalY})</small></label>
           </div>
           <div class="pt-children" data-sh-children data-parent="stu-y-${esc(y)}">${cHtml}</div>
         </div>`;
@@ -555,7 +555,7 @@
             return `<div class="pt-node">
               <div class="pt-row sh-cb-row">
                 <button type="button" class="pt-toggle sh-cb-toggle" data-t="ann-${esc(y)}-${esc(c)}">▸</button>
-                <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <strong>Kelas ${esc(c)}</strong> <small class="muted">(${names.length})</small></label>
+                <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${names.length})</small></label>
               </div>
               <div class="pt-children is-collapsed" data-sh-children data-parent="ann-${esc(y)}-${esc(c)}">${nHtml || "<p class='muted'>Kosong</p>"}</div>
             </div>`;
@@ -564,7 +564,7 @@
         return `<div class="pt-node">
           <div class="pt-row sh-cb-row">
             <button type="button" class="pt-toggle sh-cb-toggle" data-t="ann-y-${esc(y)}">▾</button>
-            <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <strong>Angkatan ${esc(y)}</strong> <small class="muted">(${totalY})</small></label>
+            <label class="sh-cb-label"><input type="checkbox" data-sh-cb="group"> <span class="sh-cb-text"><strong>Angkatan ${esc(y)}</strong></span><small class="sh-cb-count muted">(${totalY})</small></label>
           </div>
           <div class="pt-children" data-sh-children data-parent="ann-y-${esc(y)}">${cHtml}</div>
         </div>`;
@@ -794,7 +794,8 @@
           const r = rows.find((x) => String(x.id) === String(b.dataset.dupAnn));
           if (!r) return;
           const f = $("#annForm");
-if (!f) return;
+
+          if (!f) return;
           f.querySelector("[name=id]").value = "";
           f.querySelector("[name=title]").value = (r.title || "") + " (salinan)";
           {
@@ -829,7 +830,6 @@ if (!f) return;
                     f.querySelector("[name=times_per_day]").value = r.times_per_day || 1;
                     setAnnScheduleDays(f, r.schedule_days || []);
           f.querySelector("[name=splash_seconds]").value = r.splash_seconds || 15;
-
           var alarmOn = r.is_alarm === true || r.is_alarm === "true" || r.is_alarm === 1 || r.is_alarm === "1" || r.is_alarm === "t";
           var alarmCb = f.querySelector("[name=is_alarm]") || document.getElementById("annIsAlarm");
           if (alarmCb) {
@@ -909,7 +909,6 @@ if (!f) return;
                     f.querySelector("[name=times_per_day]").value = r.times_per_day || 1;
                     setAnnScheduleDays(f, r.schedule_days || []);
           f.querySelector("[name=splash_seconds]").value = r.splash_seconds || 15;
-
           var alarmOn = r.is_alarm === true || r.is_alarm === "true" || r.is_alarm === 1 || r.is_alarm === "1" || r.is_alarm === "t";
           var alarmCb = f.querySelector("[name=is_alarm]") || document.getElementById("annIsAlarm");
           if (alarmCb) {
@@ -1061,6 +1060,9 @@ if (!f) return;
       reset.onclick = () => {
         f.reset();
         f.querySelector("[name=id]").value = "";
+        var box = document.getElementById("annAlarmSettings");
+        if (box) box.style.display = "none";
+        if (f.querySelector("[name=is_alarm]")) f.querySelector("[name=is_alarm]").checked = false;
         f.querySelector("[name=is_active]").checked = true;
         setTreeStudentTargets($("#chatRoomStudentTree"), []);
         if (st) st.textContent = "";
@@ -1105,6 +1107,7 @@ if (!f) return;
     const f = $("#annForm");
     if (!f) return;
 
+    // Tombol "Hari ini" untuk starts_at (mobile & desktop)
     (function bindAnnStartsToday() {
       var btn = document.getElementById("annStartsToday");
       var inp =
@@ -1121,6 +1124,7 @@ if (!f) return;
         function pad(n) {
           return String(n).padStart(2, "0");
         }
+        // datetime-local: YYYY-MM-DDTHH:mm (detik opsional, browser sering abaikan)
         var v =
           d.getFullYear() +
           "-" +
@@ -1230,6 +1234,11 @@ if (!f) return;
         title: (f.querySelector("[name=title]") && f.querySelector("[name=title]").value) || "Preview",
         body_html: html,
         splash_seconds: Number(f.querySelector("[name=splash_seconds]").value) || 15,
+        is_alarm: !!(f.querySelector("[name=is_alarm]") && f.querySelector("[name=is_alarm]").checked),
+        alarm_min: Number((f.querySelector("[name=alarm_min]") || {}).value) || 0,
+        alarm_sec: Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0,
+        alarm_delay_sec: (Number((f.querySelector("[name=alarm_min]") || {}).value) || 0) * 60 + (Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0),
+        alarm_fire_at: new Date(Date.now() + ((Number((f.querySelector("[name=alarm_min]") || {}).value) || 0) * 60 + (Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0)) * 1000).toISOString(),
         id: "preview-" + Date.now(),
         times_per_day: 99,
         active: true,
@@ -1301,11 +1310,15 @@ if (!f) return;
       let starts = startsDate.toISOString();
       let duration_days = Number(fd.get("duration_days"));
       if (!duration_days || isNaN(duration_days) || duration_days < 1) duration_days = 1;
+      // Akhir = 23:59:59 di hari ke-(duration_days) dari tanggal mulai
       let endLocal = new Date(
         startsDate.getFullYear(),
         startsDate.getMonth(),
         startsDate.getDate() + (duration_days - 1),
-        23, 59, 59, 999
+        23,
+        59,
+        59,
+        999
       );
       let ends = endLocal.toISOString();
       let duration_hours = null;
@@ -1328,44 +1341,53 @@ if (!f) return;
         is_alarm: !!(f.querySelector("[name=is_alarm]") && f.querySelector("[name=is_alarm]").checked),
         alarm_min: Number((f.querySelector("[name=alarm_min]") || {}).value) || 0,
         alarm_sec: Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0,
-        alarm_delay_sec:
-          (Number((f.querySelector("[name=alarm_min]") || {}).value) || 0) * 60 +
-          (Number((f.querySelector("[name=alarm_sec]") || {}).value) || 0),
         active: f.querySelector("[name=active]").checked,
       };
       try {
-        const saved = await GalleryDB.upsertAnnouncement(payload);
+        var saved = await GalleryDB.upsertAnnouncement(payload);
         $("#annStatus").textContent = payload.is_alarm
-          ? "Pengumuman alarm disimpan · hitung mundur aktif."
+          ? "Alarm disimpan — kotak hitung mundur ditampilkan."
           : "Pengumuman disimpan.";
         try {
           if (payload.is_alarm) {
-            const delaySec =
+            var delaySec =
               (Number(payload.alarm_min) || 0) * 60 + (Number(payload.alarm_sec) || 0);
-            const localAnn = Object.assign({}, saved || {}, {
+            var localAnn = Object.assign({}, saved || {}, {
+              id: (saved && saved.id) || payload.id || "local-" + Date.now(),
+              title: payload.title || (saved && saved.title) || "Alarm",
+              body_html: payload.body_html || (saved && saved.body_html) || "",
               is_alarm: true,
               active: true,
               alarm_delay_sec: delaySec,
               alarm_fire_at:
                 (saved && saved.alarm_fire_at) ||
                 new Date(Date.now() + delaySec * 1000).toISOString(),
-              splash_seconds: Number(payload.splash_seconds) || 15,
-              title: payload.title,
-              body_html: payload.body_html,
-              id: (saved && saved.id) || payload.id,
+              splash_seconds: payload.splash_seconds || 15,
             });
-            try {
-              sessionStorage.removeItem("sh_alarm_closed_" + localAnn.id);
-            } catch (e0) {}
-            if (window.SHAnnounce && typeof SHAnnounce.tickAlarmFloat === "function") {
+            if (window.SHAnnounce && typeof SHAnnounce.forceShowAlarm === "function") {
+              SHAnnounce.forceShowAlarm(localAnn);
+              try {
+                if (window.__shAnnBc)
+                  window.__shAnnBc.postMessage({ type: "alarm-saved", ann: localAnn });
+              } catch (eBc) {}
+              try {
+                if (SHAnnounce.refreshAlarmsNow) SHAnnounce.refreshAlarmsNow();
+              } catch (eR) {}
+            } else if (window.SHAnnounce && typeof SHAnnounce.tickAlarmFloat === "function") {
+              try {
+                sessionStorage.removeItem("sh_alarm_closed_" + localAnn.id);
+              } catch (e0) {}
               SHAnnounce.tickAlarmFloat(localAnn);
+            } else {
+              console.warn("SHAnnounce belum siap — muat ulang halaman admin");
+              $("#annStatus").textContent =
+                "Alarm tersimpan, tapi modul floating belum siap. Muat ulang halaman.";
             }
-            try {
-              if (window.__shAnnBc) window.__shAnnBc.postMessage({ type: "alarm-saved", ann: localAnn });
-            } catch (e1) {}
           }
-        } catch (eAnn) {
-          console.warn("tampilkan alarm", eAnn);
+        } catch (e) {
+          console.warn("tampilkan alarm", e);
+          $("#annStatus").textContent =
+            "Alarm tersimpan, gagal tampilkan kotak: " + (e.message || e);
         }
         f.reset();
         f.querySelector("[name=id]").value = "";
@@ -2281,6 +2303,7 @@ if (!f) return;
     }
   }
 
+  /** Tambah menit ke string jam HH:MM / HH:MM:SS → HH:MM:SS */
   function attAddMinutes(timeStr, minutes) {
     var base = normTime(timeStr, "00:00:00");
     var p = base.split(":").map(function (x) { return parseInt(x, 10) || 0; });
@@ -2585,7 +2608,7 @@ if (!f) return;
       const startM = toMin(jamMulai);
       const endM = toMin(jamSelesai);
       if (!mapel || !day || startM == null || endM == null) continue;
-      const winIn = Number.isFinite(ciM) && ciM > 0 ? ciM : 10;
+      const winIn = (isFinite(Number(r.batas_checkin_mnt)) && Number(r.batas_checkin_mnt) > 0) ? Number(r.batas_checkin_mnt) : 10;
       const winOut = Number.isFinite(coM) && coM > 0 ? coM : 10;
       const dayNames = { 1: "Sen", 2: "Sel", 3: "Rab", 4: "Kam", 5: "Jum", 6: "Sab", 7: "Min" };
       const titleParts = [mapel, kelas ? "K" + kelas : "", dayNames[day] || "", guru].filter(Boolean);
@@ -3244,7 +3267,7 @@ if (!f) return;
                     .map((nm) => {
                       const list = root[cat][y][c][nm].map(vidRow).join("");
                       return `<div class="pt-node">
-                        <div class="pt-row"><button type="button" class="pt-toggle" data-t="v-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><strong>${esc(nm)}</strong> <small class="muted">(${root[cat][y][c][nm].length})</small></div>
+                        <div class="pt-row"><button type="button" class="pt-toggle" data-t="v-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><span class="sh-cb-text"><strong>${esc(nm)}</strong></span><small class="sh-cb-count muted">(${root[cat][y][c][nm].length})</small></div>
                         <div class="pt-children is-collapsed" data-parent="v-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">${list}</div>
                       </div>`;
                     })
@@ -3527,14 +3550,14 @@ if (!f) return;
                     )
                     .join("");
                   return `<div class="pt-node">
-                    <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><strong>${esc(nm)}</strong> <small class="muted">(${tree[y][c][nm].length})</small></div>
+                    <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><span class="sh-cb-text"><strong>${esc(nm)}</strong></span><small class="sh-cb-count muted">(${tree[y][c][nm].length})</small></div>
                     <div class="pt-children is-collapsed" data-parent="w-${esc(y)}-${esc(c)}-${esc(nm)}">${sites}</div>
                   </div>`;
                 })
                 .join("");
               const siteCount = names.reduce((n, nm) => n + tree[y][c][nm].length, 0);
               return `<div class="pt-node">
-                <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-${esc(y)}-${esc(c)}">▸</button><strong>Kelas ${esc(c)}</strong> <small class="muted">(${siteCount})</small></div>
+                <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-${esc(y)}-${esc(c)}">▸</button><span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${siteCount})</small></div>
                 <div class="pt-children is-collapsed" data-parent="w-${esc(y)}-${esc(c)}">${nHtml}</div>
               </div>`;
             })
@@ -3543,7 +3566,7 @@ if (!f) return;
             return n + Object.keys(tree[y][c] || {}).reduce((m, nm) => m + (tree[y][c][nm] || []).length, 0);
           }, 0);
           return `<div class="pt-node" style="margin-bottom:10px">
-            <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-y-${esc(y)}">▸</button><strong>Angkatan ${esc(y)}</strong> <small class="muted">(${yearCount})</small></div>
+            <div class="pt-row"><button type="button" class="pt-toggle" data-t="w-y-${esc(y)}">▸</button><span class="sh-cb-text"><strong>Angkatan ${esc(y)}</strong></span><small class="sh-cb-count muted">(${yearCount})</small></div>
             <div class="pt-children is-collapsed" data-parent="w-y-${esc(y)}">${cHtml}</div>
           </div>`;
         })
@@ -3686,7 +3709,7 @@ if (!f) return;
       return `<div class="pt-node">
         <div class="pt-row sh-stu-row">
           <button type="button" class="pt-toggle sh-cb-toggle" data-t="${esc(id)}">▸</button>
-          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"> <strong>Kelas ${esc(c)}</strong> <small class="muted">(${list.length})</small></label>
+          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"><span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${list.length})</small></label>
         </div>
         <div class="pt-children is-collapsed" data-sh-children data-parent="${esc(id)}">${rows}</div>
       </div>`;
@@ -3700,7 +3723,7 @@ if (!f) return;
       return `<div class="pt-node" style="margin-bottom:10px">
         <div class="pt-row sh-stu-row">
           <button type="button" class="pt-toggle sh-cb-toggle" data-t="${esc(id)}">▾</button>
-          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"> <strong>Angkatan ${esc(y)}</strong> <small class="muted">(${total})</small></label>
+          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"><span class="sh-cb-text"><strong>Angkatan ${esc(y)}</strong></span><small class="sh-cb-count muted">(${total})</small></label>
         </div>
         <div class="pt-children" data-sh-children data-parent="${esc(id)}">${cHtml}</div>
       </div>`;
@@ -3720,7 +3743,7 @@ if (!f) return;
       html += `<div class="pt-node" style="margin-bottom:10px">
         <div class="pt-row sh-stu-row">
           <button type="button" class="pt-toggle sh-cb-toggle" data-t="${esc(id)}">▾</button>
-          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"> <strong>Pengajar</strong> <small class="muted">(${pengajar.length})</small></label>
+          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"><span class="sh-cb-text"><strong>Pengajar</strong></span><small class="sh-cb-count muted">(${pengajar.length})</small></label>
         </div>
         <div class="pt-children" data-sh-children data-parent="${esc(id)}">${rows}</div>
       </div>`;
@@ -3743,7 +3766,7 @@ if (!f) return;
       html += `<div class="pt-node" style="margin-bottom:10px">
         <div class="pt-row sh-stu-row">
           <button type="button" class="pt-toggle sh-cb-toggle" data-t="${esc(id)}">▾</button>
-          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"> <strong>Tanpa angkatan</strong> <small class="muted">(${noYear.length})</small></label>
+          <label class="sh-stu-group"><input type="checkbox" data-sh-cb="group"><span class="sh-cb-text"><strong>Tanpa angkatan</strong></span><small class="sh-cb-count muted">(${noYear.length})</small></label>
         </div>
         <div class="pt-children" data-sh-children data-parent="${esc(id)}">${rows}</div>
       </div>`;
@@ -3820,7 +3843,7 @@ if (!f) return;
             )
             .join("");
           return `<div class="pt-node" style="margin-bottom:10px">
-            <div class="pt-row"><button type="button" class="pt-toggle" data-t="ang-${esc(y)}">▾</button><strong>Tahun ${esc(y)}</strong> <small class="muted">(${tree[y].length})</small></div>
+            <div class="pt-row"><button type="button" class="pt-toggle" data-t="ang-${esc(y)}">▾</button><span class="sh-cb-text"><strong>Tahun ${esc(y)}</strong></span><small class="sh-cb-count muted">(${tree[y].length})</small></div>
             <div class="pt-children" data-parent="ang-${esc(y)}">${list}</div>
           </div>`;
         })
@@ -3911,7 +3934,7 @@ if (!f) return;
                 })
                 .join("");
               return `<div class="pt-node">
-                <div class="pt-row"><button type="button" class="pt-toggle" data-t="c-${y}-${c}">▸</button><strong>Kelas ${esc(c)}</strong> <small class="muted">(${tree[y][c].length} tautan)</small></div>
+                <div class="pt-row"><button type="button" class="pt-toggle" data-t="c-${y}-${c}">▸</button><span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${tree[y][c].length} tautan)</small></div>
                 <div class="pt-children is-collapsed" data-parent="c-${y}-${c}">${list}</div>
               </div>`;
             })
@@ -3990,7 +4013,7 @@ if (!f) return;
           const boxS = document.createElement("div");
           boxS.style.marginTop = "16px";
           boxS.innerHTML =
-            `<div class="pt-node"><div class="pt-row"><button type="button" class="pt-toggle" data-t="link-siswa-belum">▸</button><strong>Siswa belum tertaut akun Google</strong> <small class="muted">(${cov.unlinkedStudents.length})</small></div><div class="pt-children" data-parent="link-siswa-belum">` +
+            `<div class="pt-node"><div class="pt-row"><button type="button" class="pt-toggle" data-t="link-siswa-belum">▸</button><span class="sh-cb-text"><strong>Siswa belum tertaut akun Google</strong></span><small class="sh-cb-count muted">(${cov.unlinkedStudents.length})</small></div><div class="pt-children" data-parent="link-siswa-belum">` +
             Object.keys(byY)
               .sort()
               .reverse()
@@ -3999,7 +4022,7 @@ if (!f) return;
                   .sort()
                   .map((c) => {
                     const names = byY[y][c].sort((a, b) => a.localeCompare(b, "id"));
-                    return `<div class="pt-node"><div class="pt-row"><button type="button" class="pt-toggle" data-t="sb-${y}-${c}">▾</button><strong>Angkatan ${esc(y)} · Kelas ${esc(c)}</strong> <small class="muted">(${names.length})</small></div><div class="pt-children" data-parent="sb-${y}-${c}">${names
+                    return `<div class="pt-node"><div class="pt-row"><button type="button" class="pt-toggle" data-t="sb-${y}-${c}">▾</button><span class="sh-cb-text"><strong>Angkatan ${esc(y)} · Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${names.length})</small></div><div class="pt-children" data-parent="sb-${y}-${c}">${names
                       .map((n) => `<div class="admin-row"><div><strong>${esc(n)}</strong><br><small>Belum ada akun Google yang menautkan nama ini</small></div></div>`)
                       .join("")}</div></div>`;
                   })
@@ -4016,7 +4039,7 @@ if (!f) return;
           const box = document.createElement("div");
           box.style.marginTop = "16px";
           box.innerHTML = `<div class="pt-node">
-            <div class="pt-row"><button type="button" class="pt-toggle" data-t="link-nolink">▸</button><strong>Akun Google belum pilih nama siswa</strong> <small class="muted">(${noLink.length} akun · bukan daftar siswa)</small></div>
+            <div class="pt-row"><button type="button" class="pt-toggle" data-t="link-nolink">▸</button><span class="sh-cb-text"><strong>Akun Google belum pilih nama siswa</strong></span><small class="sh-cb-count muted">(${noLink.length} akun · bukan daftar siswa)</small></div>
             <div class="pt-children" data-parent="link-nolink">${noLink
               .map(
                 (u) => `<div class="admin-row">
@@ -4207,7 +4230,7 @@ if (!f) return;
                     .map((nm) => {
                       const list = root[cat][y][c][nm].map(desRow).join("");
                       return `<div class="pt-node">
-                        <div class="pt-row"><button type="button" class="pt-toggle" data-t="d-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><strong>${esc(nm)}</strong> <small class="muted">(${root[cat][y][c][nm].length})</small></div>
+                        <div class="pt-row"><button type="button" class="pt-toggle" data-t="d-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">▸</button><span class="sh-cb-text"><strong>${esc(nm)}</strong></span><small class="sh-cb-count muted">(${root[cat][y][c][nm].length})</small></div>
                         <div class="pt-children is-collapsed" data-parent="d-${esc(cat)}-${esc(y)}-${esc(c)}-${esc(nm)}">${list}</div>
                       </div>`;
                     })
@@ -4428,7 +4451,7 @@ if (!f) return;
           .map((c) => {
             const list = tree[y][c].map(userRow).join("");
             return `<div class="pt-node">
-              <div class="pt-row"><button type="button" class="pt-toggle" data-t="u-${esc(y)}-${esc(c)}">▸</button><strong>Kelas ${esc(c)}</strong> <small class="muted">(${tree[y][c].length})</small></div>
+              <div class="pt-row"><button type="button" class="pt-toggle" data-t="u-${esc(y)}-${esc(c)}">▸</button><span class="sh-cb-text"><strong>Kelas ${esc(c)}</strong></span><small class="sh-cb-count muted">(${tree[y][c].length})</small></div>
               <div class="pt-children is-collapsed" data-parent="u-${esc(y)}-${esc(c)}">${list}</div>
             </div>`;
           })
@@ -4442,7 +4465,7 @@ if (!f) return;
     if (unlinked) {
       const noLink = rows.filter((u) => !(u.linked_student_name && String(u.linked_student_name).trim()));
       html += `<div class="pt-node" style="margin-top:12px">
-        <div class="pt-row"><button type="button" class="pt-toggle" data-t="u-nolink">▸</button><strong>Belum menautkan siswa</strong> <small class="muted">(${unlinked})</small></div>
+        <div class="pt-row"><button type="button" class="pt-toggle" data-t="u-nolink">▸</button><span class="sh-cb-text"><strong>Belum menautkan siswa</strong></span><small class="sh-cb-count muted">(${unlinked})</small></div>
         <div class="pt-children is-collapsed" data-parent="u-nolink">${noLink.map((u) => userRow(u) + adminLinkForm(u)).join("")}</div>
       </div>`;
     }
@@ -4523,16 +4546,59 @@ if (!f) return;
 
   boot();
 
-  // Alarm settings toggle
-  (function bindAnnAlarmToggle() {
-    var cb = document.getElementById("annIsAlarm");
-    var box = document.getElementById("annAlarmSettings");
-    if (!cb || !box) return;
-    function sync() {
-      box.style.display = cb.checked ? "grid" : "none";
+  // Pembersihan data absensi lama (hemat kuota Supabase free)
+  (function bindAttPurge() {
+    function ensurePurgeBar() {
+      var host = document.querySelector("#attSessionsList") || document.querySelector("[data-att-panel]") || document.getElementById("tab-attendance");
+      if (!host) return;
+      if (document.getElementById("attPurgeBar")) return;
+      var bar = document.createElement("div");
+      bar.id = "attPurgeBar";
+      bar.className = "card";
+      bar.style.margin = "12px 0";
+      bar.innerHTML =
+        "<h3 style=\"font-size:14px;margin:0 0 8px\">Arsip & bersihkan data absensi</h3>" +
+        "<p class=\"muted\" style=\"font-size:12px;margin:0 0 8px\">Unduh CSV rekap dulu, lalu hapus <b>record kehadiran</b> sebelum tanggal ini (sesi/template tidak dihapus). Membantu kuota database gratis.</p>" +
+        "<div class=\"toolbar\" style=\"gap:8px;flex-wrap:wrap\">" +
+        "<label style=\"font-size:12px\">Hapus record sebelum <input type=\"date\" id=\"attPurgeBefore\"></label>" +
+        "<button type=\"button\" class=\"btn btn-ghost\" id=\"attPurgeBtn\">Hapus record lama</button>" +
+        "<span class=\"muted\" id=\"attPurgeStatus\" style=\"font-size:12px\"></span>" +
+        "</div>";
+      host.parentNode.insertBefore(bar, host);
+      document.getElementById("attPurgeBtn").addEventListener("click", async function () {
+        var d = document.getElementById("attPurgeBefore").value;
+        var st = document.getElementById("attPurgeStatus");
+        if (!d) {
+          st.textContent = "Pilih tanggal dulu";
+          return;
+        }
+        if (!window.GalleryDB || !GalleryDB.purgeAttendanceRecordsBefore) {
+          st.textContent = "Fungsi purge belum tersedia — deploy js/db.js terbaru";
+          return;
+        }
+        if (!(await shConfirm("Hapus semua record absensi dengan tanggal sesi/check-in sebelum " + d + "?\n\nUnduh CSV rekap terlebih dahulu jika masih dibutuhkan."))) return;
+        st.textContent = "Membersihkan…";
+        try {
+          var r = await GalleryDB.purgeAttendanceRecordsBefore(d);
+          st.textContent = "Selesai: " + (r.deleted || 0) + " record dihapus" + (r.scanned != null ? " (scan " + r.scanned + ")" : "");
+        } catch (e) {
+          st.textContent = e.message || String(e);
+        }
+      });
     }
-    cb.addEventListener("change", sync);
-    sync();
+    document.addEventListener("DOMContentLoaded", function () {
+      setTimeout(ensurePurgeBar, 800);
+    });
+    // juga saat tab absensi dibuka
+    var obs = setInterval(function () {
+      if (document.getElementById("attSessionsList") || document.querySelector(".att-sess-list")) {
+        ensurePurgeBar();
+      }
+    }, 2000);
+    setTimeout(function () {
+      clearInterval(obs);
+    }, 30000);
   })();
+
 
 })();

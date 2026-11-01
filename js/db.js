@@ -1823,6 +1823,7 @@
       isAdmin = false;
     }
 
+    // Verifikasi client-side (admin + password benar → boleh, tanpa harus di daftar siswa)
     async function clientVerify() {
       const rooms = await listChatRooms({ activeOnly: false });
       const r = rooms.find(function (x) {
@@ -1845,10 +1846,12 @@
         }
       } catch (e) {}
 
+      // Password wajib jika ruang dilindungi
       if (roomPw && String(roomPw).trim()) {
         if (String(roomPw).trim() !== String(password || "").trim()) return false;
       }
 
+      // Admin yang sudah lolos password (atau ruang tanpa password) boleh masuk
       if (isAdmin) return true;
 
       if (r.allowed_class_codes && r.allowed_class_codes.length) {
@@ -1879,6 +1882,7 @@
       return true;
     }
 
+    // Admin: prioritaskan client verify (RPC lama sering menolak admin karena bukan peserta)
     if (isAdmin) {
       try {
         return await clientVerify();
@@ -1913,7 +1917,6 @@
       }
     }
   }
-
   function joinTypingChannel({ roomKey, userName, avatarEmoji, onSync }) {
     const sb = client();
     if (!sb) return { setTyping() {}, leave() {} };
@@ -2885,11 +2888,23 @@
     let ends = payload.ends_at || null;
     let duration_days = payload.duration_days != null && payload.duration_days !== "" ? Number(payload.duration_days) : null;
     let duration_hours = payload.duration_hours != null && payload.duration_hours !== "" ? Number(payload.duration_hours) : null;
-    // Default: mulai sekarang (jika kosong), tampil 24 jam jika tidak ada selesai & tidak ada durasi
-    if (!payload.starts_at) starts = nowIso;
-    if (!ends && (duration_days == null || isNaN(duration_days)) && (duration_hours == null || isNaN(duration_hours))) {
-      duration_hours = 24;
-      duration_days = null;
+    // Alarm: starts_at = detik Simpan; non-alarm: default sekarang jika kosong
+    if (payload.is_alarm === true) {
+      starts = nowIso;
+    } else if (!payload.starts_at) {
+      starts = nowIso;
+    }
+    // Default: berlaku 1 hari sampai 23:59 hari terakhir
+    if (duration_days == null || isNaN(duration_days) || duration_days < 1) {
+      duration_days = 1;
+    }
+    duration_hours = null;
+    if (!ends && starts) {
+      var sd = new Date(starts);
+      if (!isNaN(sd.getTime())) {
+        var ed = new Date(sd.getFullYear(), sd.getMonth(), sd.getDate() + (duration_days - 1), 23, 59, 59, 999);
+        ends = ed.toISOString();
+      }
     }
     const row = {
       title: payload.title || "",
@@ -2977,6 +2992,47 @@
     }
     return data || [];
   }
+
+  /**
+   * Realtime: INSERT/UPDATE pengumuman → callback segera (tanpa polling).
+   * Perlu Realtime enabled + publication untuk table gallery_announcements di Supabase.
+   */
+  function subscribeActiveAnnouncements(onChange) {
+    const sb = client();
+    if (!sb || typeof onChange !== "function") return function () {};
+    let ch = null;
+    try {
+      ch = sb
+        .channel("gallery_announcements_live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "gallery_announcements" },
+          function (payload) {
+            try {
+              onChange(payload);
+            } catch (e) {
+              console.warn("ann realtime cb", e);
+            }
+          }
+        )
+        .subscribe(function (status) {
+          if (status === "SUBSCRIBED") {
+            /* ok */
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn("ann realtime:", status);
+          }
+        });
+    } catch (e) {
+      console.warn("subscribeActiveAnnouncements", e);
+      return function () {};
+    }
+    return function unsubscribe() {
+      try {
+        if (ch) sb.removeChannel(ch);
+      } catch (e) {}
+    };
+  }
+
 
   async function batchEngagement(urls) {
     const sb = client();
@@ -3581,12 +3637,7 @@
       active: payload.active !== false,
       msg_checkin_ontime: String(payload.msg_checkin_ontime || "").trim().slice(0, 280),
       msg_checkin_late: String(payload.msg_checkin_late || "").trim().slice(0, 280),
-      warn_before_end_min: Number(fd.get("warn_before_end_min")) || 5,
-        warn_before_end_text: String(fd.get("warn_before_end_text") || "").trim(),
-        warn_before_start_min: Number(fd.get("warn_before_start_min")) || 0,
-        warn_before_start_text: String(fd.get("warn_before_start_text") || "").trim(),
-        end_message: String(fd.get("end_message") || "").trim(),
-        msg_checkout: String(payload.msg_checkout || "").trim().slice(0, 280),
+      msg_checkout: String(payload.msg_checkout || "").trim().slice(0, 280),
       warn_before_end_min: payload.warn_before_end_min != null ? Number(payload.warn_before_end_min) : 5,
       warn_before_end_text: String(payload.warn_before_end_text || "").trim().slice(0, 400),
       warn_before_start_min: payload.warn_before_start_min != null ? Number(payload.warn_before_start_min) : 0,
@@ -3736,6 +3787,43 @@
       .order("updated_at", { ascending: false });
     if (error) throw error;
     return data || [];
+  }
+
+  
+  async function purgeAttendanceRecordsBefore(beforeDate, opts) {
+    opts = opts || {};
+    const sb = client();
+    if (!sb) throw new Error("DB belum siap");
+    if (!(await isCurrentUserAdmin())) {
+      throw new Error("Hanya admin yang dapat membersihkan data absensi");
+    }
+    if (!beforeDate) throw new Error("Tanggal batas wajib (YYYY-MM-DD)");
+    let q = sb
+      .from("gallery_attendance_records")
+      .select("id, checkin_at, session_id, gallery_attendance_sessions(session_date)")
+      .limit(opts.limit || 3000);
+    if (opts.sessionId) q = q.eq("session_id", opts.sessionId);
+    const { data, error } = await q;
+    if (error) throw error;
+    const cut = String(beforeDate).slice(0, 10);
+    const ids = (data || [])
+      .filter(function (r) {
+        const sd = r.gallery_attendance_sessions && r.gallery_attendance_sessions.session_date;
+        const d = (sd || (r.checkin_at || "")).toString().slice(0, 10);
+        return d && d < cut;
+      })
+      .map(function (r) {
+        return r.id;
+      });
+    if (!ids.length) return { deleted: 0 };
+    let deleted = 0;
+    for (let i = 0; i < ids.length; i += 80) {
+      const chunk = ids.slice(i, i + 80);
+      const { error: e2 } = await sb.from("gallery_attendance_records").delete().in("id", chunk);
+      if (e2) throw e2;
+      deleted += chunk.length;
+    }
+    return { deleted: deleted, scanned: (data || []).length };
   }
 
   async function listAttendanceRecords(filters) {
@@ -4618,12 +4706,15 @@
     upsertAnnouncement,
     deleteAnnouncement,
     fetchActiveAnnouncements,
+    subscribeActiveAnnouncements,
+    client,
     listAttendanceSessionsAdmin,
     upsertAttendanceSession,
     deleteAttendanceSession,
     listActiveAttendanceSessions,
     myAttendanceRecords,
     listAttendanceRecords,
+    purgeAttendanceRecordsBefore,
     listDesigns,
     bulkImportWebsites,
     bulkImportVideos,
