@@ -320,6 +320,25 @@
             <button type="button" class="btn btn-primary" id="attSessSave">Simpan sesi</button>
             <button type="button" class="btn btn-ghost" id="attSessReset">Batal</button>
           </div>
+        <fieldset class="ann-fieldset" style="grid-column:1/-1;margin-top:8px">
+            <legend>Suara pengingat bel (TTS)</legend>
+            <p class="muted" style="font-size:12px;margin:0 0 8px">Gunakan <code>{label}</code> untuk nama mapel/sesi. Kosong = teks default.</p>
+            <label class="field"><span>Menit sebelum selesai (default 5)</span>
+              <input type="number" name="warn_before_end_min" min="1" max="60" value="5">
+            </label>
+            <label class="field" style="grid-column:1/-1"><span>Teks TTS sebelum selesai</span>
+              <input name="warn_before_end_text" placeholder="Lima menit lagi jam pelajaran {label} selesai">
+            </label>
+            <label class="field"><span>Menit sebelum mulai (0 = off)</span>
+              <input type="number" name="warn_before_start_min" min="0" max="60" value="0">
+            </label>
+            <label class="field" style="grid-column:1/-1"><span>Teks TTS sebelum mulai</span>
+              <input name="warn_before_start_text" placeholder="Lima menit lagi jam pelajaran {label} dimulai">
+            </label>
+            <label class="field" style="grid-column:1/-1"><span>Pesan popup saat selesai</span>
+              <input name="end_message" placeholder="Jam pelajaran {label} telah selesai.">
+            </label>
+          </fieldset>
         </form>
         <p id="attSessMsg" class="muted" style="font-size:14px;min-height:1.4em;font-weight:600" role="status" aria-live="polite"></p>
         <div id="attSessList" class="admin-list" style="margin-top:12px"></div>
