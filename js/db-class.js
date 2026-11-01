@@ -41,6 +41,93 @@
     if (error) throw error;
   }
 
+  
+  async function getHomeBannerUrl() {
+    const sb = client();
+    if (!sb) {
+      try {
+        return localStorage.getItem("cl_home_banner") || "";
+      } catch (e) {
+        return "";
+      }
+    }
+    try {
+      const { data, error } = await sb
+        .from("classroom_settings")
+        .select("value")
+        .eq("key", "home_banner_url")
+        .maybeSingle();
+      if (!error && data && data.value) return String(data.value);
+    } catch (e) {}
+    try {
+      return localStorage.getItem("cl_home_banner") || "";
+    } catch (e2) {
+      return "";
+    }
+  }
+
+  async function setHomeBannerUrl(url) {
+    const sb = client();
+    const u = String(url || "").trim();
+    try {
+      localStorage.setItem("cl_home_banner", u);
+    } catch (e) {}
+    if (!sb) return u;
+    try {
+      const { error } = await sb.from("classroom_settings").upsert(
+        { key: "home_banner_url", value: u, updated_at: new Date().toISOString() },
+        { onConflict: "key" }
+      );
+      if (error) throw error;
+    } catch (e) {
+      // tabel belum ada — tetap pakai localStorage
+      console.warn("[class] classroom_settings", e.message || e);
+    }
+    return u;
+  }
+
+  async function uploadHomeBanner(file) {
+    const sb = client();
+    if (!file) throw new Error("File kosong");
+    if (!sb) throw new Error("Supabase belum siap");
+    const session = await getSession();
+    if (!session) throw new Error("Login dulu");
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = "classroom/banners/home-" + Date.now() + "." + ext;
+    // coba bucket classroom-assets, fallback chat-images / public
+    const buckets = ["classroom-assets", "chat-images", "gallery"];
+    let lastErr = null;
+    for (var i = 0; i < buckets.length; i++) {
+      try {
+        const { error } = await sb.storage.from(buckets[i]).upload(path, file, {
+          upsert: true,
+          contentType: file.type || "image/jpeg",
+        });
+        if (error) throw error;
+        const { data } = sb.storage.from(buckets[i]).getPublicUrl(path);
+        const url = data && data.publicUrl;
+        if (url) {
+          await setHomeBannerUrl(url);
+          return url;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Upload banner gagal");
+  }
+
+  async function canEditHomeBanner() {
+    const session = await getSession();
+    if (!session || !session.user) return false;
+    if (isAdminEmail(session.user.email)) return true;
+    try {
+      const p = await getMyProfile();
+      if (p && (p.is_admin || p.role === "admin" || p.role === "teacher" || p.role === "pengajar")) return true;
+    } catch (e) {}
+    return false;
+  }
+
   async function signOut() {
     const sb = client();
     if (sb) await sb.auth.signOut();
@@ -367,6 +454,10 @@
     enabled,
     client,
     getSession,
+    getHomeBannerUrl,
+    setHomeBannerUrl,
+    uploadHomeBanner,
+    canEditHomeBanner,
     signInWithGoogle,
     onAuthStateChange,
     signOut,

@@ -10,6 +10,58 @@
     if (status) status.textContent = t || "";
   }
 
+
+  async function refreshBanner() {
+    var img = document.getElementById("clBannerImg");
+    var ph = document.getElementById("clBannerPh");
+    var edit = document.getElementById("clBannerEdit");
+    var file = document.getElementById("clBannerFile");
+    try {
+      var url = "";
+      if (window.ClassDB && ClassDB.getHomeBannerUrl) url = (await ClassDB.getHomeBannerUrl()) || "";
+      if (url && img) {
+        img.src = url;
+        img.hidden = false;
+        if (ph) ph.hidden = true;
+      } else {
+        if (img) img.hidden = true;
+        if (ph) ph.hidden = false;
+      }
+    } catch (e) {}
+    try {
+      var can = window.ClassDB && ClassDB.canEditHomeBanner ? await ClassDB.canEditHomeBanner() : false;
+      if (edit) {
+        edit.hidden = !can;
+        edit.style.display = can ? "" : "none";
+      }
+    } catch (e2) {
+      if (edit) edit.hidden = true;
+    }
+    if (edit && file && !edit.dataset.bound) {
+      edit.dataset.bound = "1";
+      edit.addEventListener("click", function () {
+        file.click();
+      });
+      file.addEventListener("change", async function () {
+        var f = file.files && file.files[0];
+        if (!f) return;
+        setStatus("Mengunggah banner…");
+        try {
+          var url = await ClassDB.uploadHomeBanner(f);
+          if (img) {
+            img.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now();
+            img.hidden = false;
+          }
+          if (ph) ph.hidden = true;
+          setStatus("Banner diperbarui");
+        } catch (err) {
+          setStatus((err && err.message) || String(err));
+        }
+        file.value = "";
+      });
+    }
+  }
+
   async function refreshUser() {
     const session = await ClassDB.getSession();
     if (session && session.user) {
@@ -126,19 +178,19 @@
     };
   }
 
-  refreshUser().then(loadCourses);
+  refreshUser().then(function () { refreshBanner(); return loadCourses(); });
   try {
     if (window.ClassDB && ClassDB.onAuthStateChange) {
       ClassDB.onAuthStateChange(function () {
-        refreshUser();
+        refreshUser().then(refreshBanner);
       });
     }
   } catch (e) {}
   // OAuth hash/query kadang butuh jeda singkat
   setTimeout(function () {
-    refreshUser();
+    refreshUser().then(refreshBanner);
   }, 600);
   setTimeout(function () {
-    refreshUser();
+    refreshUser().then(refreshBanner);
   }, 2000);
 })();
