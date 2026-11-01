@@ -25,12 +25,22 @@
   </header>
 
   <main>
-    <section class="hero">
-      <h1>Classroom</h1>
-      <p>Materi, progress belajar, tugas, dan nilai — terhubung database yang sama dengan Webgal, tanpa mengganggu gallery & chat.</p>
-      <div class="toolbar">
-        <button type="button" class="btn btn-primary" id="btnLogin">Login Google</button>
+    <section class="hero cl-hero">
+      <!-- Banner (admin / pengajar bisa ganti) -->
+      <div class="cl-banner" id="clBanner" aria-label="Banner classroom">
+        <img id="clBannerImg" alt="Banner" hidden>
+        <div class="cl-banner-ph muted" id="clBannerPh">Banner classroom</div>
+        <button type="button" class="btn btn-ghost cl-banner-edit" id="clBannerEdit" hidden title="Ganti banner">Ganti banner</button>
+        <input type="file" id="clBannerFile" accept="image/*" hidden>
+      </div>
+
+      <div class="cl-hero-title-row">
+        <h1>Classroom</h1>
         <button type="button" class="btn btn-ghost" id="btnLogout" hidden>Keluar</button>
+      </div>
+      <p class="cl-hero-lead">Materi, progress belajar, tugas, dan nilai — terhubung database yang sama dengan Webgal, tanpa mengganggu gallery &amp; chat.</p>
+      <div class="toolbar cl-hero-toolbar">
+        <button type="button" class="btn btn-primary" id="btnLogin">Login Google</button>
         <span class="status" id="status"></span>
       </div>
     </section>
