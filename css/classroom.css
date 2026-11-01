@@ -94,3 +94,18 @@ label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px;
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.06); }
 th { color: var(--muted); font-weight: 600; }
+
+
+.userchip{
+  display:flex;align-items:center;gap:8px;max-width:min(240px,46vw);
+  padding:4px 10px 4px 4px;border-radius:999px;
+  border:1px solid rgba(125,227,255,.22);background:rgba(255,255,255,.04);
+  font-size:12px;min-height:40px;
+}
+.userchip-avatar{
+  width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;
+}
+.userchip-fallback{font-size:18px;width:32px;text-align:center}
+.userchip-meta{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.userchip-meta b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.userchip-meta small{font-size:10px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
