@@ -25,7 +25,6 @@
       <a href="refleksi.html">Nilai Proses</a>
       <a href="stats.html">Statistik</a>
       <a href="absensi.html">Absensi</a>
-      <a href="classroom.html">Classroom</a>
       <a href="chat.html">Chat</a>
       <a href="panduan.html">Panduan</a>
       <a href="about.html">About</a>
@@ -260,7 +259,13 @@
           <p id="attBulkSchedMsg" class="muted" style="font-size:13px;margin-top:8px"></p>
         </details>
 
-        <form id="attSessForm" class="ann-form">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 8px;align-items:center">
+          <button type="button" class="btn btn-primary" id="attSessAddBtn">+ Tambah jadwal manual</button>
+          <span class="muted" style="font-size:12px">Form tersembunyi sampai Anda menambah atau mengedit</span>
+        </div>
+        <div id="attSessFormDock">
+        <div id="attSessFormHost" class="admin-inline-form-host" hidden>
+        <form id="attSessForm" class="ann-form admin-inline-form">
           <input type="hidden" name="id" value="">
           <label class="field"><span>Judul sesi</span><input name="title" required placeholder="SMM Minggu 7 — Domain"></label>
           <label class="field"><span>Kode mapel</span>
@@ -298,15 +303,6 @@
           <label class="check" style="align-self:center"><input type="checkbox" name="require_checkout" checked> Wajib check-out</label>
           <label class="check" style="align-self:center"><input type="checkbox" name="allow_late"> Izinkan absen terlambat</label>
           <label class="check ann-active-align"><input type="checkbox" name="active" checked> Aktif</label>
-            <label class="check" style="grid-column:1/-1"><input type="checkbox" name="is_alarm" id="annIsAlarm" value="1"> <b>⏰ Alarm bersuara</b> — hitung mundur lalu TTS baca judul &amp; isi</label>
-            <div id="annAlarmSettings" class="ann-alarm-settings" style="grid-column:1/-1;display:none;gap:10px;padding:10px 12px;border:1px solid rgba(255,180,60,.35);border-radius:10px;background:rgba(40,28,8,.35)">
-              <div style="font-size:12px;font-weight:700;color:#ffc46a">⏱ Setelan alarm</div>
-              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
-                <label class="field" style="margin:0"><span>Menit</span><input type="number" name="alarm_min" id="annAlarmMin" min="0" max="1440" value="1" style="width:88px"></label>
-                <label class="field" style="margin:0"><span>Detik</span><input type="number" name="alarm_sec" id="annAlarmSec" min="0" max="59" value="0" style="width:88px"></label>
-                <small class="muted" style="flex:1;min-width:160px">Hitung mundur (jam pasir 1) → TTS + hitung mundur tutup (jam pasir 2 = durasi splash).</small>
-              </div>
-            </div>
           <label class="field" style="grid-column:1/-1"><span>Pesan popup check-in (tepat waktu) — opsional</span>
             <input name="msg_checkin_ontime" maxlength="280" placeholder="Kosong = default: Terima kasih sudah hadir tepat waktu.">
           </label>
@@ -317,10 +313,8 @@
             <input name="msg_checkout" maxlength="280" placeholder="Kosong = default: Terima kasih telah mengikuti pelajaran hingga selesai…">
           </label>
           <div class="admin-form-actions" style="grid-column:1/-1">
-            <button type="button" class="btn btn-primary" id="attSessSave">Simpan sesi</button>
-            <button type="button" class="btn btn-ghost" id="attSessReset">Batal</button>
-          </div>
-        <fieldset class="ann-fieldset" style="grid-column:1/-1;margin-top:8px">
+            
+          <fieldset class="ann-fieldset" style="grid-column:1/-1;margin-top:8px">
             <legend>Suara pengingat bel (TTS)</legend>
             <p class="muted" style="font-size:12px;margin:0 0 8px">Gunakan <code>{label}</code> untuk nama mapel/sesi. Kosong = teks default.</p>
             <label class="field"><span>Menit sebelum selesai (default 5)</span>
@@ -339,8 +333,13 @@
               <input name="end_message" placeholder="Jam pelajaran {label} telah selesai.">
             </label>
           </fieldset>
+<button type="button" class="btn btn-primary" id="attSessSave">Simpan sesi</button>
+            <button type="button" class="btn btn-ghost" id="attSessReset">Batal</button>
+          </div>
         </form>
         <p id="attSessMsg" class="muted" style="font-size:14px;min-height:1.4em;font-weight:600" role="status" aria-live="polite"></p>
+        </div><!-- #attSessFormHost -->
+        </div><!-- #attSessFormDock -->
         <div id="attSessList" class="admin-list" style="margin-top:12px"></div>
         <hr style="border:0;border-top:1px solid rgba(125,227,255,.12);margin:18px 0">
         <h3 style="font-size:1.05rem">Rekap kehadiran</h3>
@@ -406,7 +405,13 @@
       <section data-panel="announce" class="summary-card admin-pane" hidden>
         <h3>Pengumuman</h3>
         <p class="muted one-line-desktop" style="font-size:13px;margin:0 0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Splash bisa ditutup · atur audiens, jadwal, dan konten (teks, link, gambar).</p>
-        <form id="annForm" class="ann-form" method="post" action="javascript:void(0)" onsubmit="return false;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px;align-items:center">
+          <button type="button" class="btn btn-primary" id="annAddBtn">+ Buat pengumuman</button>
+          <span class="muted" style="font-size:12px">Form hanya muncul saat buat / ubah</span>
+        </div>
+        <div id="annFormDock">
+        <div id="annFormHost" class="admin-inline-form-host" hidden>
+        <form id="annForm" class="ann-form admin-inline-form" method="post" action="javascript:void(0)" onsubmit="return false;">
           <input type="hidden" name="id" value="">
           <label class="field"><span>Judul</span><input name="title" required placeholder="Judul pengumuman"></label>
           <div class="field ann-body-field" style="grid-column:1/-1;text-align:left">
@@ -441,7 +446,7 @@
             <label class="check"><input type="checkbox" name="show_students"> Siswa tertentu (login + taut nama) — splash</label>
             <div id="annStudentTree" class="privacy-tree sh-cb-tree ann-student-tree is-collapsed" style="max-height:320px;overflow:auto;margin-top:8px;text-align:left"></div>
           </fieldset>
-<label class="field" style="grid-column:1/-1">
+          <label class="field" style="grid-column:1/-1">
             <span>Mulai tayang</span>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
               <input type="datetime-local" name="starts_at" id="annStartsAt" style="flex:1;min-width:180px">
@@ -466,6 +471,15 @@
           </div>
           <label class="field"><span>Durasi splash (detik)</span><input type="number" name="splash_seconds" min="5" max="120" value="15"></label>
           <label class="check ann-active-align"><input type="checkbox" name="active" checked> Aktif</label>
+            <label class="check" style="grid-column:1/-1"><input type="checkbox" name="is_alarm" id="annIsAlarm" value="1"> <b>⏰ Alarm bersuara</b> — hitung mundur lalu TTS baca judul &amp; isi</label>
+            <div id="annAlarmSettings" class="ann-alarm-settings" style="grid-column:1/-1;display:none;gap:10px;padding:10px 12px;border:1px solid rgba(255,180,60,.35);border-radius:10px;background:rgba(40,28,8,.35)">
+              <div style="font-size:12px;font-weight:700;color:#ffc46a">⏱ Setelan alarm</div>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+                <label class="field" style="margin:0"><span>Menit</span><input type="number" name="alarm_min" id="annAlarmMin" min="0" max="1440" value="1" style="width:88px"></label>
+                <label class="field" style="margin:0"><span>Detik</span><input type="number" name="alarm_sec" id="annAlarmSec" min="0" max="59" value="0" style="width:88px"></label>
+                <small class="muted" style="flex:1;min-width:160px">Hitung mundur mulai <b>saat disimpan</b>. Kotak floating muncul di admin &amp; di halaman pengguna sesuai audience.</small>
+              </div>
+            </div>
           <div class="admin-form-actions" style="grid-column:1/-1">
             <button class="btn btn-primary" type="button" id="annSave">Simpan pengumuman</button>
             <button class="btn btn-ghost" type="button" id="annReset">Batal edit</button>
@@ -474,6 +488,9 @@
           </div>
         </form>
         <p id="annStatus" class="muted" style="font-size:13px"></p>
+        </div><!-- #annFormHost -->
+        </div><!-- #annFormDock -->
+
         <label class="field admin-search-wrap" style="margin:12px 0 8px">
           <span>Cari di list</span>
           <input type="search" id="annSearch" class="admin-list-search" placeholder="Cari judul pengumuman…" autocomplete="off">
@@ -599,6 +616,23 @@
     document.addEventListener("selectstart", function(e){ if(isField(e.target)) e.stopPropagation(); }, true);
   })();
   </script>
+
+
+<script>
+(function(){
+  function syncAlarmUI(){
+    var cb=document.getElementById("annIsAlarm");
+    var box=document.getElementById("annAlarmSettings");
+    if(!cb||!box)return;
+    box.style.display=cb.checked?"grid":"none";
+  }
+  document.addEventListener("change",function(e){
+    if(e.target&&e.target.id==="annIsAlarm")syncAlarmUI();
+  });
+  document.addEventListener("DOMContentLoaded",syncAlarmUI);
+  setTimeout(syncAlarmUI,500);
+})();
+</script>
 
 </body>
 </html>
