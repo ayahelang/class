@@ -6,35 +6,74 @@
   <title>Migrasi Chat → Database Class</title>
   <link rel="stylesheet" href="../css/style.css">
   <script src="../data/db-backend-config.js"></script>
-  <script src="../js/db-sheets.js"></script>
 </head>
 <body class="page-skills" style="padding:24px;max-width:720px;margin:auto">
   <h1>Migrasi chat ke database Class</h1>
-  <p class="muted">Tempel JSON hasil export Supabase (array of objects). Butuh password admin database.</p>
-  <label class="field"><span>Password admin</span><input type="password" id="pw"></label>
-  <label class="field"><span>Tabel</span>
-    <select id="table"><option value="chat_rooms">chat_rooms</option><option value="chat_messages">chat_messages</option></select>
+  <p class="muted">Tempel JSON hasil export Supabase (harus <b>array</b> of objects). Butuh password admin database (Script Property <code>ADMIN_PASSWORD</code>).</p>
+
+  <label class="field"><span>Password admin</span>
+    <input type="password" id="pw" autocomplete="current-password" style="width:100%">
   </label>
-  <label class="field"><span>JSON array</span><textarea id="json" rows="12" style="width:100%;font-family:monospace"></textarea></label>
-  <button class="btn btn-primary" id="go">Import</button>
-  <p id="msg" class="muted"></p>
+
+  <label class="field"><span>Tabel</span>
+    <select id="table" style="width:100%">
+      <option value="chat_rooms">chat_rooms (ruang — import ini dulu)</option>
+      <option value="chat_messages">chat_messages (pesan)</option>
+    </select>
+  </label>
+
+  <label class="field"><span>JSON array</span>
+    <textarea id="json" rows="16" style="width:100%;font-family:monospace;font-size:12px" placeholder='[ { "id": "...", "name": "..." }, ... ]'></textarea>
+  </label>
+
+  <p style="margin-top:12px">
+    <button type="button" class="btn btn-primary" id="go">Import</button>
+  </p>
+  <p id="msg" class="muted" style="white-space:pre-wrap"></p>
+
+  <hr style="margin:24px 0;opacity:.3">
+  <p class="muted" style="font-size:13px">
+    <b>Jika error setValues / "number of rows"</b>:<br>
+    1. Update & deploy ulang <code>ClassSheetsBackend.gs</code> (versi perbaikan).<br>
+    2. Buka Spreadsheet → tab <code>chat_rooms</code> → batalkan merge sel → pastikan header baris 1: <code>id | json | updated_at</code>.<br>
+    3. Import lagi.
+  </p>
+
   <script>
-  document.getElementById('go').onclick = async function () {
-    var msg = document.getElementById('msg');
+  function gasUrl() {
+    var c = window.SH_DB_BACKEND_CONFIG || {};
+    return String(c.gasUrl || "").trim();
+  }
+
+  document.getElementById("go").onclick = async function () {
+    var msg = document.getElementById("msg");
+    msg.textContent = "Memproses…";
     try {
-      var rows = JSON.parse(document.getElementById('json').value);
-      if (!Array.isArray(rows)) throw new Error('JSON harus array');
-      await SheetsDB.adminLoginPassword(document.getElementById('pw').value);
-      var table = document.getElementById('table').value;
-      var n = 0;
-      for (var i = 0; i < rows.length; i++) {
-        await SheetsDB.upsertRow(table, rows[i]);
-        n++;
-        if (i % 20 === 0) msg.textContent = 'Import ' + n + '/' + rows.length;
-      }
-      msg.textContent = 'Selesai: ' + n + ' baris → ' + table;
+      var url = gasUrl();
+      if (!url) throw new Error("gasUrl kosong di data/db-backend-config.js");
+      var text = document.getElementById("json").value.trim();
+      var rows = JSON.parse(text);
+      if (!Array.isArray(rows)) throw new Error("JSON harus berupa array [ ... ]");
+      if (!rows.length) throw new Error("Array kosong");
+      var password = document.getElementById("pw").value;
+      var table = document.getElementById("table").value;
+
+      // Satu request bulk (lebih stabil)
+      var res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "importBulk",
+          table: table,
+          rows: rows,
+          password: password,
+        }),
+      });
+      var data = await res.json();
+      if (!data || !data.ok) throw new Error((data && data.error) || "Import gagal");
+      msg.textContent = "Selesai: " + (data.imported || rows.length) + " baris → " + table;
     } catch (e) {
-      msg.textContent = e.message || String(e);
+      msg.textContent = (e && e.message) ? e.message : String(e);
     }
   };
   </script>

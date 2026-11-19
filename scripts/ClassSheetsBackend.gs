@@ -11,7 +11,7 @@
  * 4. Deploy Web App: Execute as Me, Anyone
  * 5. Salin URL ke data/db-backend-config.js → gasUrl
  *
- * Sheet tabs dibuat otomatis saat pertama diakses.
+ * Sheet tabs: id | json | updated_at (dibuat otomatis)
  */
 
 var TABS = [
@@ -45,6 +45,7 @@ function doPost(e) {
     if (action === "adminLogin") return adminLogin_(body);
     if (action === "list") return list_(body);
     if (action === "upsert") return upsert_(body);
+    if (action === "importBulk") return importBulk_(body);
     if (action === "delete") return delete_(body);
     if (action === "clearChat") return clearChat_(body);
     if (action === "ping") return json_({ ok: true, ts: Date.now() });
@@ -64,12 +65,22 @@ function ss_() {
   return SpreadsheetApp.openById(id);
 }
 
+/** Pastikan tab format: A=id, B=json, C=updated_at (tanpa merge) */
 function ensureTab_(name) {
   var ss = ss_();
   var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
-    sh.appendRow(["id", "json", "updated_at"]);
+    sh.getRange(1, 1, 1, 3).setValues([["id", "json", "updated_at"]]);
+    return sh;
+  }
+  // Perbaiki header bila kosong / beda
+  try {
+    sh.getRange(1, 1, 1, 3).breakApart();
+  } catch (e0) {}
+  var h1 = String(sh.getRange(1, 1).getValue() || "");
+  if (!h1 || h1.toLowerCase() !== "id") {
+    sh.getRange(1, 1, 1, 3).setValues([["id", "json", "updated_at"]]);
   }
   return sh;
 }
@@ -83,14 +94,8 @@ function adminLogin_(body) {
   }
   var label = props_().getProperty("ADMIN_LABEL") || "Admin Class";
   var token = Utilities.getUuid();
-  // simpan token singkat di cache script (6 jam)
   CacheService.getScriptCache().put("tok_" + token, "admin", 21600);
   return json_({ ok: true, label: label, email: "admin-class@sheets.local", token: token });
-}
-
-function requireTokenOptional_(body) {
-  // mutasi sebaiknya ada token; list publik boleh tanpa
-  return true;
 }
 
 function list_(body) {
@@ -99,8 +104,9 @@ function list_(body) {
     return json_({ ok: false, error: "table invalid" });
   }
   var sh = ensureTab_(table);
-  var values = sh.getDataRange().getValues();
-  if (values.length < 2) return json_({ ok: true, rows: [] });
+  var last = sh.getLastRow();
+  if (last < 2) return json_({ ok: true, rows: [] });
+  var values = sh.getRange(1, 1, last, 3).getValues();
   var rows = [];
   var limit = Number(body.limit) || 500;
   for (var i = 1; i < values.length && rows.length < limit; i++) {
@@ -119,52 +125,101 @@ function list_(body) {
   return json_({ ok: true, rows: rows });
 }
 
+function findRowById_(sh, id) {
+  var last = sh.getLastRow();
+  if (last < 2) return -1;
+  var ids = sh.getRange(2, 1, last, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
+  }
+  return -1;
+}
+
+function writeLine_(sh, sheetRow, line) {
+  // Selalu tulis tepat 1 baris x 3 kolom
+  sh.getRange(sheetRow, 1, sheetRow, 3).setValues([line]);
+}
+
 function upsert_(body) {
   var table = String(body.table || "");
   var row = body.row || {};
   if (!row.id) row.id = Utilities.getUuid();
   var sh = ensureTab_(table);
-  var values = sh.getDataRange().getValues();
   var id = String(row.id);
-  var found = -1;
-  for (var i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === id) {
-      found = i + 1;
-      break;
-    }
-  }
   var line = [id, JSON.stringify(row), new Date().toISOString()];
-  if (found > 0) sh.getRange(found, 1, found, 3).setValues([line]);
-  else sh.appendRow(line);
+  var found = findRowById_(sh, id);
+  if (found > 0) {
+    writeLine_(sh, found, line);
+  } else {
+    // append tanpa mengandalkan appendRow (lebih aman ke kolom tepat)
+    var next = Math.max(sh.getLastRow() + 1, 2);
+    writeLine_(sh, next, line);
+  }
   return json_({ ok: true, row: row });
+}
+
+/** Bulk import — lebih cepat & stabil untuk migrasi */
+function importBulk_(body) {
+  var expected = props_().getProperty("ADMIN_PASSWORD");
+  if (String(body.password || "") !== expected) {
+    return json_({ ok: false, error: "Password salah" });
+  }
+  var table = String(body.table || "");
+  var rows = body.rows || [];
+  if (TABS.indexOf(table) < 0) return json_({ ok: false, error: "table invalid" });
+  if (!rows.length) return json_({ ok: true, imported: 0 });
+
+  var sh = ensureTab_(table);
+  var n = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || {};
+    if (!row.id) row.id = Utilities.getUuid();
+    var id = String(row.id);
+    var line = [id, JSON.stringify(row), new Date().toISOString()];
+    var found = findRowById_(sh, id);
+    if (found > 0) writeLine_(sh, found, line);
+    else {
+      var next = Math.max(sh.getLastRow() + 1, 2);
+      writeLine_(sh, next, line);
+    }
+    n++;
+  }
+  return json_({ ok: true, imported: n });
 }
 
 function delete_(body) {
   var table = String(body.table || "");
   var id = String(body.id || "");
   var sh = ensureTab_(table);
-  var values = sh.getDataRange().getValues();
-  for (var i = values.length - 1; i >= 1; i--) {
-    if (String(values[i][0]) === id) {
-      sh.deleteRow(i + 1);
-    }
-  }
+  var found = findRowById_(sh, id);
+  if (found > 0) sh.deleteRow(found);
   return json_({ ok: true });
 }
 
 function clearChat_(body) {
   var room = String(body.room_id || "");
   var sh = ensureTab_("chat_messages");
-  var values = sh.getDataRange().getValues();
+  var last = sh.getLastRow();
+  if (last < 2) return json_({ ok: true, cleared: 0 });
+  var values = sh.getRange(1, 1, last, 3).getValues();
+  var cleared = 0;
   for (var i = values.length - 1; i >= 1; i--) {
+    var obj = {};
     try {
-      var obj = JSON.parse(values[i][1]);
-      if (!room || String(obj.room_id) === room) sh.deleteRow(i + 1);
-    } catch (e) {}
+      obj = JSON.parse(values[i][1]);
+    } catch (e) {
+      obj = {};
+    }
+    if (!room || String(obj.room_id || "") === room) {
+      sh.deleteRow(i + 1);
+      cleared++;
+    }
   }
-  return json_({ ok: true });
+  return json_({ ok: true, cleared: cleared });
 }
 
-function json_(o) {
-  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
+    ContentService.MimeType.JSON
+  );
 }
