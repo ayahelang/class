@@ -1,4 +1,3 @@
-Class primary DB = Google Sheets + Apps Script.
-Supabase/Firebase optional via admin panel.
-Webgal unchanged in this package.
-Set gasUrl in data/db-backend-config.js after deploying ClassSheetsBackend.gs
+Admin gate UI:
+- sheets mode: password only, no Google, neutral "database" wording
+- supabase/firebase allowed: Login icon toggles collapsed options

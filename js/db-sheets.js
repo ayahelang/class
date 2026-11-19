@@ -70,7 +70,7 @@
 
   async function gasCall(action, payload) {
     var url = gasUrl();
-    if (!url) throw new Error("gasUrl belum diisi di data/db-backend-config.js");
+    if (!url) throw new Error("URL database belum dikonfigurasi.");
     var body = Object.assign(
       {
         action: action,
@@ -159,11 +159,9 @@
 
     signInWithGoogle: async function () {
       if (!supabaseAllowed() && getMode() !== "supabase") {
-        throw new Error(
-          "Login Google nonaktif. Admin belum mengaktifkan Supabase di panel backend."
-        );
+        throw new Error("Login Google belum diaktifkan oleh admin.");
       }
-      throw new Error("Login Google hanya tersedia saat backend Supabase aktif.");
+      throw new Error("Login Google belum diaktifkan.");
     },
 
     signOut: async function () {

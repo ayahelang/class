@@ -5186,29 +5186,101 @@
 
 
   
-  // Class Sheets login form
-  (function bindSheetsLogin() {
-    var form = document.getElementById("adminSheetsLoginForm");
-    if (!form || form.dataset.bound === "1") return;
-    form.dataset.bound = "1";
-    form.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      var msg = document.getElementById("adminSheetsLoginMsg");
-      var pass = document.getElementById("adminSheetsPass");
+  // Login admin: mode database primer vs cloud (opsi collapse)
+  (function bindAdminGateLogin() {
+    function doPasswordLogin(passEl, msgEl) {
+      return (async function () {
+        try {
+          if (msgEl) {
+            msgEl.style.color = "";
+            msgEl.textContent = "Memverifikasi…";
+          }
+          if (!window.GalleryDB || !GalleryDB.adminLoginPassword) {
+            throw new Error("Koneksi database belum siap. Periksa konfigurasi.");
+          }
+          await GalleryDB.adminLoginPassword(passEl && passEl.value);
+          location.reload();
+        } catch (err) {
+          var t = err.message || String(err);
+          // jangan bocorkan nama backend ke user
+          t = t.replace(/gasUrl|Apps Script|Script Properties|Supabase|Firebase|Sheet|Spreadsheet/gi, "database");
+          if (msgEl) {
+            msgEl.style.color = "#ff8a8a";
+            msgEl.textContent = t;
+          }
+        }
+      })();
+    }
+
+    function bindForm(formId, passId, msgId) {
+      var form = document.getElementById(formId);
+      if (!form || form.dataset.bound === "1") return;
+      form.dataset.bound = "1";
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        doPasswordLogin(document.getElementById(passId), document.getElementById(msgId));
+      });
+    }
+    bindForm("adminSheetsLoginForm", "adminSheetsPass", "adminSheetsLoginMsg");
+    bindForm("adminSheetsLoginFormCloud", "adminSheetsPassCloud", "adminSheetsLoginMsgCloud");
+
+    function refreshGateVisibility() {
+      var mode = "sheets";
+      var allowSb = false;
+      var allowFb = false;
       try {
-        if (msg) msg.textContent = "Memverifikasi…";
-        if (!window.GalleryDB || !GalleryDB.adminLoginPassword) {
-          throw new Error("Sheets backend belum termuat / gasUrl kosong");
+        if (window.SHSheetsBackend) {
+          mode = SHSheetsBackend.getMode() || "sheets";
+          allowSb = !!SHSheetsBackend.supabaseAllowed();
+          allowFb = !!SHSheetsBackend.firebaseAllowed();
+        } else if (window.SH_DB_BACKEND_CONFIG) {
+          mode = SH_DB_BACKEND_CONFIG.primary || "sheets";
+          allowSb = !!SH_DB_BACKEND_CONFIG.allowSupabase;
+          allowFb = !!SH_DB_BACKEND_CONFIG.allowFirebase;
         }
-        await GalleryDB.adminLoginPassword(pass && pass.value);
-        location.reload();
-      } catch (err) {
-        if (msg) {
-          msg.style.color = "#ff8a8a";
-          msg.textContent = err.message || String(err);
-        }
+      } catch (e) {}
+
+      var cloudMode = mode === "supabase" || mode === "firebase" || allowSb || allowFb;
+      var passBlock = document.getElementById("adminDbPassBlock");
+      var cloudBlock = document.getElementById("adminCloudLoginBlock");
+      var gateMsg = document.getElementById("gateMsg");
+      var acc = document.getElementById("adminGateAccounts");
+      var gWrap = document.getElementById("adminGoogleLoginWrap");
+      var opts = document.getElementById("adminLoginOptions");
+      var tog = document.getElementById("adminLoginToggle");
+
+      if (cloudMode) {
+        // opsi login tersembunyi; tampil setelah klik tombol Login (ikon Google)
+        if (passBlock) passBlock.hidden = true;
+        if (cloudBlock) cloudBlock.hidden = false;
+        if (opts) opts.hidden = true;
+        if (tog) tog.setAttribute("aria-expanded", "false");
+        if (gWrap) gWrap.hidden = !(allowSb || mode === "supabase");
+        if (gateMsg) gateMsg.textContent = "Klik Login untuk memilih cara masuk admin.";
+        if (acc) acc.hidden = !(allowSb || mode === "supabase");
+      } else {
+        // mode database primer: hanya password, tanpa Google
+        if (passBlock) passBlock.hidden = false;
+        if (cloudBlock) cloudBlock.hidden = true;
+        if (gateMsg) gateMsg.textContent = "Masuk sebagai admin dengan password database.";
+        if (acc) acc.hidden = true;
       }
-    });
+    }
+
+    var tog = document.getElementById("adminLoginToggle");
+    if (tog && tog.dataset.bound !== "1") {
+      tog.dataset.bound = "1";
+      tog.addEventListener("click", function () {
+        var opts = document.getElementById("adminLoginOptions");
+        if (!opts) return;
+        var open = opts.hidden;
+        opts.hidden = !open;
+        tog.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+    }
+
+    refreshGateVisibility();
+    window.__shRefreshAdminGate = refreshGateVisibility;
   })();
 
   (function bindBackendPanel() {
@@ -5217,12 +5289,10 @@
     var allowFb = document.getElementById("shAllowFirebase");
     var saveBtn = document.getElementById("shBackendSave");
     var msg = document.getElementById("shBackendMsg");
-    var gWrap = document.getElementById("adminGoogleLoginWrap");
     if (window.SHSheetsBackend) {
       if (modeSel) modeSel.value = SHSheetsBackend.getMode();
       if (allowSb) allowSb.checked = SHSheetsBackend.supabaseAllowed();
       if (allowFb) allowFb.checked = SHSheetsBackend.firebaseAllowed();
-      if (gWrap) gWrap.hidden = !SHSheetsBackend.supabaseAllowed();
     }
     if (saveBtn && !saveBtn.dataset.bound) {
       saveBtn.dataset.bound = "1";
@@ -5231,11 +5301,13 @@
         if (modeSel) SHSheetsBackend.setMode(modeSel.value);
         if (allowSb) SHSheetsBackend.setSupabaseAllowed(allowSb.checked);
         if (allowFb) SHSheetsBackend.setFirebaseAllowed(allowFb.checked);
-        if (gWrap) gWrap.hidden = !SHSheetsBackend.supabaseAllowed();
         if (msg) {
           msg.style.color = "#8ff5bd";
-          msg.textContent = "Backend disimpan di browser ini. Reload agar penuh diterapkan.";
+          msg.textContent = "Pengaturan database disimpan. Reload agar diterapkan penuh.";
         }
+        try {
+          if (window.__shRefreshAdminGate) window.__shRefreshAdminGate();
+        } catch (e) {}
       };
     }
   })();
