@@ -53,11 +53,20 @@
     </section>
 
     <div id="gate" class="summary-card" style="display:grid;gap:12px;max-width:440px">
-      <p class="muted" id="gateMsg">Masuk dengan akun Google yang diizinkan sebagai admin.</p>
-      <button type="button" class="btn-google" id="btnGoogle">
-        <span class="g-icon" aria-hidden="true"></span>
-        Login with Google
-      </button>
+      <p class="muted" id="gateMsg">Class memakai database Sheet (primer). Login admin dengan password cadangan; Login Google hanya jika Supabase diaktifkan.</p>
+      <form id="adminSheetsLoginForm" style="display:grid;gap:8px">
+        <label class="field"><span>Password admin (Google Sheet / Apps Script)</span>
+          <input type="password" id="adminSheetsPass" autocomplete="current-password" placeholder="Password Script Properties">
+        </label>
+        <button type="submit" class="btn btn-primary" id="adminSheetsLoginBtn">Masuk (Sheet)</button>
+        <p id="adminSheetsLoginMsg" class="muted" style="font-size:12px;margin:0"></p>
+      </form>
+      <div id="adminGoogleLoginWrap" hidden>
+        <button type="button" class="btn-google" id="btnGoogle">
+          <span class="g-icon" aria-hidden="true"></span>
+          Login with Google
+        </button>
+      </div>
       <p class="muted" style="font-size:12px">Akun utama: admin@silverhawk.web.id · teddyskom63@guru.sma.belajar.id · ted834r@gmail.com</p>
     </div>
 
@@ -524,6 +533,22 @@
       
 
       <section data-panel="kuota" class="summary-card admin-pane" hidden>
+        <div class="summary-card" style="margin-top:12px;padding:12px;border:1px solid rgba(125,227,255,.15);border-radius:12px" id="shBackendPanel">
+          <h3 style="margin:0 0 8px;font-size:1rem">Backend database (Class)</h3>
+          <p class="muted" style="font-size:12px;margin:0 0 8px">Primer: Google Sheet. Supabase/Firebase opsional.</p>
+          <label class="field"><span>Mode primer</span>
+            <select id="shBackendMode">
+              <option value="sheets">Google Sheet (primer)</option>
+              <option value="supabase">Supabase</option>
+              <option value="firebase">Firebase</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="shAllowSupabase"> Izinkan Supabase (Login Google &amp; DB)</label>
+          <label class="check"><input type="checkbox" id="shAllowFirebase"> Izinkan Firebase</label>
+          <button type="button" class="btn btn-primary" id="shBackendSave" style="margin-top:8px">Simpan backend</button>
+          <p id="shBackendMsg" class="muted" style="font-size:12px"></p>
+        </div>
+
         <h3>Mode Kuota Supabase</h3>
         <p class="muted" style="font-size:13px;margin:0 0 12px">
           Mode <b>Hemat</b> mengurangi beban egress Free Plan: cache lebih lama, realtime chat/pengumuman/absensi dimatikan,
@@ -610,8 +635,12 @@
   </main>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="data/supabase-config.js"></script>
+  <script src="data/db-backend-config.js"></script>
+  <script src="js/db-sheets.js"></script>
+
   <script src="js/quota-mode.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/db-router-class.js"></script>
   <script src="js/ui-dialog.js"></script>
   <script src="js/preview-card.js"></script>
   <script src="js/profile-status.js"></script>

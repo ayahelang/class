@@ -5185,6 +5185,61 @@
   }
 
 
+  
+  // Class Sheets login form
+  (function bindSheetsLogin() {
+    var form = document.getElementById("adminSheetsLoginForm");
+    if (!form || form.dataset.bound === "1") return;
+    form.dataset.bound = "1";
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var msg = document.getElementById("adminSheetsLoginMsg");
+      var pass = document.getElementById("adminSheetsPass");
+      try {
+        if (msg) msg.textContent = "Memverifikasi…";
+        if (!window.GalleryDB || !GalleryDB.adminLoginPassword) {
+          throw new Error("Sheets backend belum termuat / gasUrl kosong");
+        }
+        await GalleryDB.adminLoginPassword(pass && pass.value);
+        location.reload();
+      } catch (err) {
+        if (msg) {
+          msg.style.color = "#ff8a8a";
+          msg.textContent = err.message || String(err);
+        }
+      }
+    });
+  })();
+
+  (function bindBackendPanel() {
+    var modeSel = document.getElementById("shBackendMode");
+    var allowSb = document.getElementById("shAllowSupabase");
+    var allowFb = document.getElementById("shAllowFirebase");
+    var saveBtn = document.getElementById("shBackendSave");
+    var msg = document.getElementById("shBackendMsg");
+    var gWrap = document.getElementById("adminGoogleLoginWrap");
+    if (window.SHSheetsBackend) {
+      if (modeSel) modeSel.value = SHSheetsBackend.getMode();
+      if (allowSb) allowSb.checked = SHSheetsBackend.supabaseAllowed();
+      if (allowFb) allowFb.checked = SHSheetsBackend.firebaseAllowed();
+      if (gWrap) gWrap.hidden = !SHSheetsBackend.supabaseAllowed();
+    }
+    if (saveBtn && !saveBtn.dataset.bound) {
+      saveBtn.dataset.bound = "1";
+      saveBtn.onclick = function () {
+        if (!window.SHSheetsBackend) return;
+        if (modeSel) SHSheetsBackend.setMode(modeSel.value);
+        if (allowSb) SHSheetsBackend.setSupabaseAllowed(allowSb.checked);
+        if (allowFb) SHSheetsBackend.setFirebaseAllowed(allowFb.checked);
+        if (gWrap) gWrap.hidden = !SHSheetsBackend.supabaseAllowed();
+        if (msg) {
+          msg.style.color = "#8ff5bd";
+          msg.textContent = "Backend disimpan di browser ini. Reload agar penuh diterapkan.";
+        }
+      };
+    }
+  })();
+
   boot();
 
   // Pembersihan data absensi lama (hemat kuota Supabase free)
