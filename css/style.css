@@ -987,101 +987,229 @@ html.sh-economy .sh-share-bar,
 html.sh-economy #shServerFab{opacity:.35}
 
 
-/* Brand subtitle SEBARIS (hemat vertikal desktop & mobile) */
+/* Password visibility toggle — tidak mengubah layout field lain */
+.sh-pw-wrap{
+  position:relative;
+  display:block;
+  width:100%;
+  max-width:100%;
+}
+.sh-pw-wrap > input[type="password"],
+.sh-pw-wrap > input[type="text"].sh-pw-input,
+.sh-pw-wrap > input.sh-dialog-input{
+  width:100%;
+  box-sizing:border-box;
+  padding-right:2.75rem !important;
+}
+.sh-pw-toggle{
+  position:absolute;
+  right:4px;
+  top:50%;
+  transform:translateY(-50%);
+  z-index:2;
+  width:40px;
+  height:40px;
+  min-width:40px;
+  min-height:40px;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:var(--muted,#8fa7b4);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+.sh-pw-toggle:hover,
+.sh-pw-toggle:focus-visible{
+  color:var(--cyan,#7de3ff);
+  background:rgba(125,227,255,.08);
+  outline:none;
+}
+.sh-pw-toggle svg{
+  width:20px;
+  height:20px;
+  display:block;
+  pointer-events:none;
+}
+.sh-pw-toggle .sh-pw-ico-hide{display:none}
+.sh-pw-toggle.is-shown .sh-pw-ico-show{display:none}
+.sh-pw-toggle.is-shown .sh-pw-ico-hide{display:block}
+@media (max-width:640px){
+  .sh-pw-toggle{width:44px;height:44px;min-width:44px;min-height:44px;right:2px}
+  .sh-pw-wrap > input{padding-right:3rem !important}
+}
+
+
+/* Brand subtitle selalu SEBARIS */
 .topbar .brand small,
 .brand small {
   display: block !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  max-width: min(240px, 46vw) !important;
-  line-height: 1.15 !important;
-  letter-spacing: 0.06em !important;
+  max-width: min(220px, 42vw) !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.08em !important;
   font-size: 9px !important;
-  margin-top: 1px !important;
 }
-@media (max-width: 900px) {
+@media (min-width: 901px) {
   .topbar .brand small,
   .brand small {
-    max-width: min(160px, 40vw) !important;
-    font-size: 8px !important;
-    letter-spacing: 0.04em !important;
-  }
-  .topbar {
-    min-height: 52px !important;
+    max-width: 280px !important;
+    letter-spacing: 1.2px !important;
   }
 }
 
-/* Userbar kosong (mode database primer) tidak makan ruang */
-.sh-userbar:empty,
-.sh-userbar[hidden],
-.sh-userbar[aria-hidden="true"] {
-  display: none !important;
-  width: 0 !important;
-  min-width: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-}
-
-/* Password eye toggle */
-.sh-pw-wrap {
+/* Chip akun: default hanya avatar; meta + menu muncul saat dibuka */
+.sh-userbar {
   position: relative;
-  display: block;
-  width: 100%;
-}
-.sh-pw-wrap > input[type="password"],
-.sh-pw-wrap > input[type="text"].sh-pw-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding-right: 2.75rem !important;
-}
-.sh-pw-toggle {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 2;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted, #8fa7b4);
-  cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  flex-shrink: 0;
 }
-.sh-pw-toggle:hover,
-.sh-pw-toggle:focus-visible {
-  color: var(--cyan, #7de3ff);
-  background: rgba(125, 227, 255, 0.08);
-  outline: none;
+.sh-profile-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  padding: 2px !important;
+  border-radius: 999px !important;
+  max-width: none !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  border: 1px solid rgba(125,227,255,.2);
+  background: rgba(15,27,36,.55);
 }
-.sh-pw-toggle svg {
-  width: 20px;
-  height: 20px;
+.sh-profile-chip img,
+.sh-profile-chip .sh-av-fallback {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  object-fit: cover;
   display: block;
-  pointer-events: none;
+  flex-shrink: 0;
 }
-.sh-pw-toggle .sh-pw-ico-hide { display: none; }
-.sh-pw-toggle.is-shown .sh-pw-ico-show { display: none; }
-.sh-pw-toggle.is-shown .sh-pw-ico-hide { display: block; }
-@media (max-width: 640px) {
-  .sh-pw-toggle {
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    min-height: 44px;
+.sh-profile-chip .sh-av-fallback {
+  display: grid !important;
+  place-items: center;
+  font-size: 16px;
+  background: rgba(125,227,255,.12);
+}
+/* sembunyikan nama di chip — hemat ruang */
+.sh-profile-chip .sh-profile-meta {
+  display: none !important;
+}
+.sh-user-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 200px;
+  max-width: min(280px, 92vw);
+  z-index: 10050;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(125,227,255,.22);
+  background: linear-gradient(165deg, rgba(18,30,40,.98), rgba(10,18,26,.98));
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  color: var(--text, #eef7fb);
+}
+.sh-userbar.is-open .sh-user-menu {
+  display: block;
+}
+.sh-user-menu .sh-um-name {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.3;
+  margin: 0 0 2px;
+  word-break: break-word;
+}
+.sh-user-menu .sh-um-role {
+  font-size: 11px;
+  color: var(--muted, #8fa7b4);
+  margin: 0 0 10px;
+}
+.sh-user-menu a,
+.sh-user-menu button.sh-um-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin: 0 0 4px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(125,227,255,.06);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.sh-user-menu a:hover,
+.sh-user-menu button.sh-um-btn:hover {
+  background: rgba(125,227,255,.14);
+}
+/* Sembunyikan link Profil di topnav saat user login (ada di menu avatar) */
+/* Profil & Admin di topnav: selalu disembunyikan (akses lewat Login / menu avatar) */
+.topnav a[href="profile.html"],
+.topnav a[href="./profile.html"],
+.topnav a[href="/profile.html"],
+.topnav a.nav-admin,
+nav.topnav a.nav-admin {
+  display: none !important;
+}
+@media (max-width: 900px) {
+  .sh-profile-chip img,
+  .sh-profile-chip .sh-av-fallback {
+    width: 32px !important;
+    height: 32px !important;
   }
-  .sh-pw-wrap > input {
-    padding-right: 3rem !important;
+  .sh-user-menu {
+    right: 0;
+    left: auto;
   }
+}
+
+
+/* Login header: collapsible Google + password */
+.sh-login-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:flex-end}
+.sh-login-main{gap:8px}
+.sh-login-caret{font-size:10px;opacity:.7;margin-left:2px}
+.sh-login-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:80;
+  min-width:200px;padding:6px;
+  border-radius:12px;border:1px solid rgba(125,227,255,.28);
+  background:rgba(10,18,28,.98);box-shadow:0 12px 32px rgba(0,0,0,.45);
+  display:flex;flex-direction:column;gap:4px;
+}
+.sh-login-menu[hidden]{display:none!important}
+.sh-login-item{
+  display:flex;align-items:center;gap:8px;width:100%;
+  text-align:left;padding:10px 12px;border:0;border-radius:10px;
+  background:transparent;color:var(--text,#e8f4fa);font-size:13px;font-weight:600;
+  cursor:pointer;text-decoration:none;
+}
+.sh-login-item:hover{background:rgba(26,143,209,.2)}
+.sh-pass-modal{position:fixed;inset:0;z-index:100100;display:flex;align-items:center;justify-content:center}
+.sh-pass-modal[hidden]{display:none!important}
+.sh-pass-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.sh-pass-card{position:relative;z-index:1;width:min(360px,92vw);background:#0c1520;border:1px solid rgba(125,227,255,.3);border-radius:16px;padding:18px 18px 16px;color:#e8f4fa;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.sh-pass-card h3{margin:0 0 6px;font-size:16px}
+.sh-pass-hint{margin:0 0 12px;font-size:12px;opacity:.8}
+.sh-pass-label{display:flex;flex-direction:column;gap:6px;font-size:12px;margin-bottom:10px}
+.sh-pass-label input{padding:10px 12px;border-radius:10px;border:1px solid rgba(125,227,255,.28);background:rgba(0,0,0,.25);color:inherit}
+.sh-pass-msg{min-height:1.2em;font-size:12px;margin:0 0 10px}
+.sh-pass-actions{display:flex;justify-content:flex-end;gap:8px}
+
+/* Admin darurat */
+body.sh-admin-emergency #panel{display:block!important;visibility:visible!important}
+.sh-emergency-banner{
+  margin:0 0 12px;padding:10px 12px;border-radius:12px;
+  border:1px solid rgba(253,230,138,.35);background:rgba(120,80,10,.25);
+  color:#fde68a;font-size:13px;line-height:1.4;
 }

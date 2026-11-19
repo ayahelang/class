@@ -44,11 +44,20 @@
         field.hidden = false;
         input.value = opts.defaultValue != null ? String(opts.defaultValue) : "";
         input.placeholder = opts.placeholder || "";
+        input.type = opts.password ? "password" : "text";
+        input.setAttribute("autocomplete", opts.password ? "current-password" : "off");
+        if (opts.password) input.setAttribute("data-sh-pw", "1");
+        else input.removeAttribute("data-sh-pw");
         setTimeout(function () {
-          try { input.focus(); input.select(); } catch (e) {}
+          try {
+            input.focus();
+            if (!opts.password) input.select();
+            if (opts.password && window.SHPasswordToggle) SHPasswordToggle.enhance(input);
+          } catch (e) {}
         }, 30);
       } else {
         field.hidden = true;
+        input.type = "text";
       }
       function close(val) {
         el.classList.remove("is-open");
@@ -98,12 +107,15 @@
         cancelLabel: "Tidak",
       });
     },
-    prompt: function (message, defaultValue, title) {
+    prompt: function (message, defaultValue, title, opts) {
+      opts = opts || {};
       return openDialog({
         mode: "prompt",
         message: String(message || ""),
         title: title || "Input",
         defaultValue: defaultValue != null ? defaultValue : "",
+        password: !!opts.password,
+        placeholder: opts.placeholder || "",
         okLabel: "OK",
         cancelLabel: "Batal",
       });

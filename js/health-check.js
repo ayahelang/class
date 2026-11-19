@@ -2,9 +2,12 @@
 (function () {
   const CHECKS = [
     { id: "config", label: "Konfigurasi aplikasi" },
-    { id: "supabase_js", label: "Library database (klien)" },
-    { id: "supabase_url", label: "Endpoint database (URL)" },
-    { id: "supabase_ping", label: "Koneksi ke database" },
+    { id: "backend_mode", label: "Mode database (Sheets/Supabase)" },
+    { id: "sheets_gas", label: "Endpoint Google Apps Script" },
+    { id: "sheets_ping", label: "Koneksi database Sheet" },
+    { id: "supabase_js", label: "Library Supabase (opsional)" },
+    { id: "supabase_url", label: "Endpoint Supabase (opsional)" },
+    { id: "supabase_ping", label: "Koneksi Supabase (opsional)" },
     { id: "auth", label: "Layanan autentikasi" },
     { id: "session", label: "Sesi login pengguna" },
     { id: "t_angkatan", label: "Tabel angkatan" },
@@ -111,13 +114,46 @@
       }
     };
 
-    // config
+    // mode backend Class
+    var mode = "supabase";
+    try {
+      if (window.GalleryDB && GalleryDB.getBackendMode) mode = GalleryDB.getBackendMode() || mode;
+      else if (window.SHSheetsBackend && SHSheetsBackend.getMode) mode = SHSheetsBackend.getMode() || mode;
+      else if (window.SH_DB_BACKEND_CONFIG && SH_DB_BACKEND_CONFIG.primary) mode = SH_DB_BACKEND_CONFIG.primary;
+    } catch (eM) {}
+    var sheetsMode = mode === "sheets";
+    set("backend_mode", true, sheetsMode ? "Google Sheet (primer)" : "Mode: " + mode);
+
+    var gas = "";
+    try {
+      gas = (window.SH_DB_BACKEND_CONFIG && SH_DB_BACKEND_CONFIG.gasUrl) || "";
+    } catch (eG) {}
+    set("sheets_gas", sheetsMode ? !!gas : true, gas ? "GAS terisi" : (sheetsMode ? "gasUrl kosong di db-backend-config.js" : "Tidak dipakai (bukan mode Sheet)"));
+
+    if (sheetsMode && gas && window.SheetsDB && SheetsDB.gasCall) {
+      try {
+        var tSheet = performance.now();
+        await SheetsDB.gasCall("list", { table: "chat_rooms", limit: 1 });
+        set("sheets_ping", true, "GAS merespons " + Math.round(performance.now() - tSheet) + " ms");
+      } catch (eS) {
+        set("sheets_ping", false, (eS && eS.message) || String(eS));
+      }
+    } else if (sheetsMode) {
+      set("sheets_ping", false, "SheetsDB/GAS belum siap");
+    } else {
+      set("sheets_ping", true, "Lewati (mode bukan Sheet)");
+    }
+
     const cfg = (window.GALLERY_SUPABASE || window.SUPABASE_CONFIG || window.GalleryConfig || {});
     const url = (cfg.url || cfg.supabaseUrl || "").trim();
     const key = (cfg.anonKey || cfg.supabaseAnonKey || cfg.key || "").trim();
-    set("config", !!(url && key), url ? "URL & anon key terisi" : "supabase-config.js belum lengkap");
+    if (sheetsMode) {
+      set("config", !!gas, gas ? "Mode Sheet · GAS OK" : "Mode Sheet · gasUrl belum diisi");
+    } else {
+      set("config", !!(url && key), url ? "URL & anon key terisi" : "supabase-config.js belum lengkap");
+    }
 
-    set("supabase_js", !!(window.supabase && window.supabase.createClient), window.supabase ? "createClient tersedia" : "Script database belum termuat");
+    set("supabase_js", !!(window.supabase && window.supabase.createClient), window.supabase ? "createClient tersedia" : (sheetsMode ? "Opsional di mode Sheet" : "Script database belum termuat"));
 
     let host = "";
     try {
@@ -136,10 +172,21 @@
     }
 
     if (!sb) {
-      set("supabase_ping", false, "Client database tidak bisa dibuat");
-      ["auth", "session", "t_angkatan", "t_alumni", "t_websites", "t_videos", "t_video_cat", "t_profiles", "t_reactions", "t_comments", "t_events", "t_chat", "t_settings", "gallery_load"].forEach((id) =>
-        set(id, false, "Dilewati (database offline)")
-      );
+      if (sheetsMode) {
+        set("supabase_ping", true, "Tidak dipakai (mode Google Sheet)");
+        set("supabase_url", true, "Opsional");
+        set("auth", true, "Login admin lewat password/Sheet");
+        set("session", true, "Sesi Sheet / darurat");
+        ["t_angkatan", "t_alumni", "t_websites", "t_videos", "t_video_cat", "t_profiles", "t_reactions", "t_comments", "t_events", "t_chat", "t_settings"].forEach(function (id) {
+          set(id, true, "Data via Google Sheet / GAS");
+        });
+        set("gallery_load", true, "Gallery via Sheet bila dikonfigurasi");
+      } else {
+        set("supabase_ping", false, "Client database tidak bisa dibuat");
+        ["auth", "session", "t_angkatan", "t_alumni", "t_websites", "t_videos", "t_video_cat", "t_profiles", "t_reactions", "t_comments", "t_events", "t_chat", "t_settings", "gallery_load"].forEach((id) =>
+          set(id, false, "Dilewati (database offline)")
+        );
+      }
     } else {
       try {
         const t0 = performance.now();
