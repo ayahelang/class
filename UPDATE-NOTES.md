@@ -1,3 +1,2 @@
-- Brand Student Web Gallery one line
-- Hide topbar Google Login in sheets/database-primary mode (Admin stays)
-- Password eye toggle site-wide, default hidden
+Fix: data-shlock-domain includes class.silverhawk.web.id on all pages.
+Chat migrate docs + SQL + GAS helper + tools/chat-migrate.html

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Migrasi Chat → Database Class</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="../data/db-backend-config.js"></script>
+  <script src="../js/db-sheets.js"></script>
+</head>
+<body class="page-skills" style="padding:24px;max-width:720px;margin:auto">
+  <h1>Migrasi chat ke database Class</h1>
+  <p class="muted">Tempel JSON hasil export Supabase (array of objects). Butuh password admin database.</p>
+  <label class="field"><span>Password admin</span><input type="password" id="pw"></label>
+  <label class="field"><span>Tabel</span>
+    <select id="table"><option value="chat_rooms">chat_rooms</option><option value="chat_messages">chat_messages</option></select>
+  </label>
+  <label class="field"><span>JSON array</span><textarea id="json" rows="12" style="width:100%;font-family:monospace"></textarea></label>
+  <button class="btn btn-primary" id="go">Import</button>
+  <p id="msg" class="muted"></p>
+  <script>
+  document.getElementById('go').onclick = async function () {
+    var msg = document.getElementById('msg');
+    try {
+      var rows = JSON.parse(document.getElementById('json').value);
+      if (!Array.isArray(rows)) throw new Error('JSON harus array');
+      await SheetsDB.adminLoginPassword(document.getElementById('pw').value);
+      var table = document.getElementById('table').value;
+      var n = 0;
+      for (var i = 0; i < rows.length; i++) {
+        await SheetsDB.upsertRow(table, rows[i]);
+        n++;
+        if (i % 20 === 0) msg.textContent = 'Import ' + n + '/' + rows.length;
+      }
+      msg.textContent = 'Selesai: ' + n + ' baris → ' + table;
+    } catch (e) {
+      msg.textContent = e.message || String(e);
+    }
+  };
+  </script>
+</body>
+</html>
