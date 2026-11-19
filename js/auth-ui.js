@@ -1,4 +1,4 @@
-/** Topbar: Google login / avatar di KANAN; admin pakai ikon Google → panel admin */
+/** Topbar auth: sembunyikan Login Google saat mode database primer (tanpa cloud) */
 (function () {
   function $(s, r) {
     return (r || document).querySelector(s);
@@ -10,16 +10,32 @@
       .replace(/"/g, "&quot;");
   }
 
+  function googleLoginAllowed() {
+    try {
+      if (window.SHSheetsBackend) {
+        var m = SHSheetsBackend.getMode() || "sheets";
+        if (m === "supabase" || m === "firebase") return true;
+        return !!SHSheetsBackend.supabaseAllowed();
+      }
+      var c = window.SH_DB_BACKEND_CONFIG;
+      if (c) {
+        var p = c.primary || "sheets";
+        if (p === "supabase" || p === "firebase") return true;
+        return !!c.allowSupabase;
+      }
+    } catch (e) {}
+    // Tanpa config Class: tampilkan Login (kompatibel webgal)
+    return true;
+  }
+
   function placeUserbar(bar) {
     const topbar = $(".topbar");
     if (!topbar) return;
     bar.classList.add("sh-userbar");
     bar.id = bar.id || "shUserbar";
-    // Jika sudah di topbar, jangan dipindah (hindari FOUC header)
     if (bar.parentNode === topbar) return;
     const slot = $("#shUserbar");
     if (slot && slot !== bar && slot.parentNode === topbar) {
-      // isi slot yang sudah ada di HTML
       slot.replaceWith(bar);
       return;
     }
@@ -28,6 +44,12 @@
 
   function hideAdminNavLinks(hide) {
     document.querySelectorAll("a.nav-admin").forEach(function (a) {
+      // Di halaman admin, biarkan Admin terlihat sebagai navigasi aktif
+      if (a.classList.contains("active")) {
+        a.removeAttribute("hidden");
+        a.style.display = "";
+        return;
+      }
       if (hide) {
         a.setAttribute("hidden", "");
         a.style.display = "none";
@@ -39,25 +61,42 @@
   }
 
   async function ensureProfileBar() {
-    if (!window.GalleryDB || !GalleryDB.enabled()) return;
+    if (!window.GalleryDB || !GalleryDB.enabled) {
+      // tetap coba render bar kosong / tanpa login
+    }
     let bar = $(".sh-userbar");
     if (!bar) {
       bar = document.createElement("div");
       bar.className = "sh-userbar";
       placeUserbar(bar);
-    } else if (bar.parentNode) {
-      // pastikan tetap di kanan
+    } else {
       placeUserbar(bar);
     }
 
     try {
-      const session = await GalleryDB.getSession();
+      var session = null;
+      try {
+        if (window.GalleryDB && GalleryDB.getSession) session = await GalleryDB.getSession();
+      } catch (e0) {}
+
       if (!session || !session.user) {
+        document.body.classList.remove("sh-user-logged");
+        document.body.classList.add("sh-user-guest");
+        // Mode database primer: jangan tampilkan Login Google (hemat ruang; Admin tetap di nav)
+        if (!googleLoginAllowed()) {
+          bar.innerHTML = "";
+          bar.hidden = true;
+          bar.setAttribute("aria-hidden", "true");
+          hideAdminNavLinks(false);
+          return;
+        }
+        bar.hidden = false;
+        bar.removeAttribute("aria-hidden");
         hideAdminNavLinks(false);
-        bar.innerHTML = `<a class="btn-google-sm" href="profile.html?login=1" title="Login Google" id="shTopLogin">
-          <span class="g-icon" aria-hidden="true"></span> Login
-        </a>`;
-        const btn = bar.querySelector("#shTopLogin");
+        bar.innerHTML =
+          '<a class="btn-google-sm" href="profile.html?login=1" title="Login" id="shTopLogin">' +
+          '<span class="g-icon" aria-hidden="true"></span> Login</a>';
+        var btn = bar.querySelector("#shTopLogin");
         if (btn) {
           btn.addEventListener("click", function () {
             try {
@@ -67,14 +106,20 @@
         }
         return;
       }
+
+      document.body.classList.add("sh-user-logged");
+      document.body.classList.remove("sh-user-guest");
+      bar.hidden = false;
+      bar.removeAttribute("aria-hidden");
+
       const u = session.user;
       const meta = u.user_metadata || {};
       const avatar = meta.avatar_url || meta.picture || "";
       const name = meta.full_name || meta.name || (u.email || "User").split("@")[0];
       try {
-        await GalleryDB.upsertMyProfileFromSession();
+        if (GalleryDB.upsertMyProfileFromSession) await GalleryDB.upsertMyProfileFromSession();
       } catch (e) {}
-      let statusLabel = "Login Google";
+      let statusLabel = "User";
       try {
         const prof = await GalleryDB.getMyProfile();
         if (prof && prof.linked_angkatan_year && window.SHStatus) {
@@ -86,24 +131,27 @@
         isAdm = await GalleryDB.isCurrentUserAdmin();
       } catch (e) {}
 
-      // Admin: sembunyikan link "Admin" di menu; ikon Google = masuk panel admin
       hideAdminNavLinks(!!isAdm);
 
       const href = isAdm ? "admin.html" : "profile.html";
-      const title = isAdm
-        ? "Panel Admin · " + name
-        : name + " · " + (u.email || "");
+      const title = isAdm ? "Panel Admin · " + name : name;
       const sub = isAdm ? "Admin" : statusLabel;
-
       bar.innerHTML =
-        `<a class="sh-profile-chip${isAdm ? " is-admin" : ""}" href="${href}" title="${escapeHtml(title)}">` +
+        '<a class="sh-profile-chip' +
+        (isAdm ? " is-admin" : "") +
+        '" href="' +
+        href +
+        '" title="' +
+        escapeHtml(title) +
+        '">' +
         (avatar
-          ? `<img src="${escapeHtml(avatar)}" alt="">`
-          : `<span class="sh-av-fallback">👤</span>`) +
-        `<span class="sh-profile-meta">` +
-        `<b>${escapeHtml(name)}</b>` +
-        `<small>${escapeHtml(sub)}</small>` +
-        `</span></a>`;
+          ? '<img src="' + escapeHtml(avatar) + '" alt="">'
+          : '<span class="sh-av-fallback">👤</span>') +
+        '<span class="sh-profile-meta"><b>' +
+        escapeHtml(name) +
+        "</b><small>" +
+        escapeHtml(sub) +
+        "</small></span></a>";
     } catch (e) {
       console.warn(e);
     }
@@ -114,5 +162,7 @@
   } else {
     ensureProfileBar();
   }
+  setTimeout(ensureProfileBar, 100);
+  setTimeout(ensureProfileBar, 600);
   window.SHAuthUI = { refresh: ensureProfileBar };
 })();

@@ -1,3 +1,3 @@
-Admin gate UI:
-- sheets mode: password only, no Google, neutral "database" wording
-- supabase/firebase allowed: Login icon toggles collapsed options
+- Brand Student Web Gallery one line
+- Hide topbar Google Login in sheets/database-primary mode (Admin stays)
+- Password eye toggle site-wide, default hidden
