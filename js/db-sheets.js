@@ -113,6 +113,7 @@
 
   function writeSession(o) {
     var hours = Number(cfg().sessionHours) || 8;
+    o = o || {};
     var s = {
       ok: true,
       role: o.role || "admin",
@@ -120,6 +121,11 @@
       email: o.email || "admin-sheets@local",
       token: o.token || ("t-" + Date.now()),
       exp: Date.now() + hours * 3600 * 1000,
+      user_id: o.user_id || "",
+      alumni_id: o.alumni_id || "",
+      angkatan_year: o.angkatan_year || "",
+      class_code: o.class_code || "",
+      must_change_password: !!o.must_change_password,
     };
     localStorage.setItem(LS_SESSION, JSON.stringify(s));
     return s;
@@ -544,20 +550,23 @@
       });
       if (!data || !data.ok) throw new Error((data && data.error) || "Login gagal");
       var u = data.user || {};
-      var sess = {
+      var sess = writeSession({
         token: data.token,
-        email: u.email || (u.name || "user") + "@sheets.local",
+        email: u.email || ((u.name || "user") + "@sheets.local"),
         name: u.name || "User",
         role: u.role || "student",
-        user_id: u.id,
-        alumni_id: u.alumni_id || "",
-        angkatan_year: u.angkatan_year || "",
-        class_code: u.class_code || "",
-        must_change_password: !!u.must_change_password,
-        at: Date.now(),
-      };
+      });
+      // field tambahan untuk profil / absensi
       try {
-        localStorage.setItem(LS_SESSION, JSON.stringify(sess));
+        var full = JSON.parse(localStorage.getItem(LS_SESSION) || "{}");
+        full.user_id = u.id;
+        full.alumni_id = u.alumni_id || "";
+        full.angkatan_year = u.angkatan_year || "";
+        full.class_code = u.class_code || "";
+        full.must_change_password = !!u.must_change_password;
+        full.token = data.token;
+        localStorage.setItem(LS_SESSION, JSON.stringify(full));
+        sess = full;
       } catch (e) {}
       return sess;
     },

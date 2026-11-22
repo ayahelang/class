@@ -159,12 +159,74 @@
     const meta = u.user_metadata || {};
     $("#nm").textContent = meta.full_name || meta.name || "User";
     $("#em").textContent = u.email || "";
+
+    // Panel ganti password untuk login Sheet (angkatan + nama)
+    try {
+      const forcePw = new URLSearchParams(location.search).get("change_password") === "1";
+      const mustPw = !!meta.must_change_password;
+      const isSheets = !!(window.GalleryDB && GalleryDB.getBackendMode && GalleryDB.getBackendMode() === "sheets");
+      let pwBox = document.getElementById("sheetsPasswordPanel");
+      if (!pwBox) {
+        pwBox = document.createElement("div");
+        pwBox.id = "sheetsPasswordPanel";
+        pwBox.className = "summary-card";
+        pwBox.style.cssText = "margin:0 0 8px;background:rgba(125,227,255,.06);border-color:rgba(125,227,255,.25)";
+        const host = document.getElementById("in");
+        if (host) host.insertBefore(pwBox, host.firstChild);
+      }
+      if ((isSheets || forcePw || mustPw) && pwBox) {
+        pwBox.hidden = false;
+        pwBox.innerHTML =
+          "<h3 style=\"margin:0 0 8px;font-size:1rem\">Ganti password</h3>" +
+          "<p class=\"muted\" style=\"margin:0 0 10px;font-size:13px\">" +
+          (forcePw || mustPw
+            ? "Silakan ganti password sebelum melanjutkan."
+            : "Ubah password akun (login dengan angkatan + nama).") +
+          "</p>" +
+          '<label class="field"><span>Password saat ini</span><input type="password" id="shCurPw" autocomplete="current-password" style="width:100%"></label>' +
+          '<label class="field"><span>Password baru (min. 6)</span><input type="password" id="shNewPw" autocomplete="new-password" style="width:100%"></label>' +
+          '<label class="field"><span>Ulangi password baru</span><input type="password" id="shNewPw2" autocomplete="new-password" style="width:100%"></label>' +
+          '<p id="shPwMsg" class="muted" style="font-size:13px"></p>' +
+          '<button type="button" class="btn btn-primary" id="shPwSave">Simpan password</button>';
+        const btn = document.getElementById("shPwSave");
+        if (btn) {
+          btn.onclick = async () => {
+            const msg = document.getElementById("shPwMsg");
+            const a = (document.getElementById("shNewPw") || {}).value || "";
+            const b = (document.getElementById("shNewPw2") || {}).value || "";
+            const cur = (document.getElementById("shCurPw") || {}).value || "";
+            if (a.length < 6) {
+              msg.textContent = "Password baru minimal 6 karakter";
+              return;
+            }
+            if (a !== b) {
+              msg.textContent = "Password baru tidak sama";
+              return;
+            }
+            try {
+              if (!GalleryDB.userChangePassword) throw new Error("Fitur ganti password belum tersedia (deploy GAS terbaru)");
+              await GalleryDB.userChangePassword({ old_password: cur, new_password: a });
+              msg.textContent = "Password berhasil diperbarui.";
+              if (forcePw || mustPw) setTimeout(() => { location.href = "index.html"; }, 700);
+            } catch (err) {
+              msg.textContent = err.message || String(err);
+            }
+          };
+        }
+      }
+    } catch (ePw) {}
     if (meta.avatar_url || meta.picture) {
       $("#av").src = meta.avatar_url || meta.picture;
       $("#av").hidden = false;
     }
-    await GalleryDB.upsertMyProfileFromSession();
-    const prof = await GalleryDB.getMyProfile();
+    try {
+      if (GalleryDB.upsertMyProfileFromSession) await GalleryDB.upsertMyProfileFromSession();
+    } catch (eUp) {}
+    let prof = null;
+    try {
+      prof = GalleryDB.getMyProfile ? await GalleryDB.getMyProfile() : null;
+    } catch (ePr) { prof = null; }
+
     if (prof) {
       if (prof.linked_angkatan_year) {
         $("#angkatanYear").value = String(prof.linked_angkatan_year);
