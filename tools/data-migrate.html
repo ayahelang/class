@@ -10,6 +10,7 @@
 <body class="page-skills" style="padding:24px;max-width:720px;margin:auto">
   <h1>Migrasi data Supabase → Sheet</h1>
   <p class="muted">Tempel JSON <b>array of objects</b> (setiap objek wajib punya <code>id</code>). Password = Script Property <code>ADMIN_PASSWORD</code>.</p>
+  <p class="muted" style="font-size:13px">Jika export SQL memakai kolom <code>row_json</code>, centang opsi normalisasi di bawah.</p>
 
   <label class="field"><span>Password admin</span>
     <input type="password" id="pw" autocomplete="current-password" style="width:100%">
@@ -21,53 +22,189 @@
       <option value="alumni">alumni</option>
       <option value="websites">websites</option>
       <option value="videos">videos</option>
+      <option value="designs">designs</option>
       <option value="announcements">announcements</option>
+      <option value="announcement_reads">announcement_reads</option>
       <option value="attendance_sessions">attendance_sessions</option>
       <option value="attendance_records">attendance_records</option>
       <option value="chat_rooms">chat_rooms</option>
       <option value="chat_messages">chat_messages</option>
       <option value="profiles">profiles</option>
+      <option value="reactions">reactions</option>
+      <option value="events">events</option>
+      <option value="settings">settings</option>
       <option value="_meta">_meta</option>
     </select>
+  </label>
+
+  <label class="field" style="display:flex;align-items:center;gap:8px;margin:10px 0">
+    <input type="checkbox" id="unwrapRowJson" checked>
+    <span>Normalisasi dari format export <code>{ "row_json": {…} }</code></span>
+  </label>
+
+  <label class="field"><span>Ukuran batch (baris per request)</span>
+    <input type="number" id="batchSize" min="10" max="500" value="80" style="width:100%">
   </label>
 
   <label class="field"><span>JSON array</span>
     <textarea id="json" rows="16" style="width:100%;font-family:monospace;font-size:12px" placeholder='[ { "id": "...", ... }, ... ]'></textarea>
   </label>
 
-  <p style="margin-top:12px">
+  <p style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
     <button type="button" class="btn btn-primary" id="go">Import bulk</button>
+    <button type="button" class="btn btn-ghost" id="btnStop" hidden>Stop</button>
   </p>
-  <p id="msg" class="muted" style="white-space:pre-wrap"></p>
-  <p class="muted" style="font-size:13px">Panduan lengkap: <code>docs/MIGRATE-ALL-SUPABASE-TO-SHEETS.md</code></p>
+
+  <div id="progressWrap" style="margin-top:12px;display:none">
+    <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden">
+      <div id="progressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#5ec8ff,#7de3ff);transition:width .2s"></div>
+    </div>
+    <p id="progressText" class="muted" style="margin:8px 0 0;font-size:13px"></p>
+  </div>
+
+  <p id="msg" class="muted" style="white-space:pre-wrap;margin-top:12px"></p>
+  <p class="muted" style="font-size:13px">Panduan: <code>docs/MIGRATE-ALL-SUPABASE-TO-SHEETS.md</code></p>
 
   <script>
-  document.getElementById("go").onclick = async function () {
+  (function () {
+    var stopFlag = false;
+    var btnStop = document.getElementById("btnStop");
+    var progressWrap = document.getElementById("progressWrap");
+    var progressBar = document.getElementById("progressBar");
+    var progressText = document.getElementById("progressText");
     var msg = document.getElementById("msg");
-    msg.textContent = "Memproses…";
-    try {
-      var cfg = window.SH_DB_BACKEND_CONFIG || {};
-      var url = String(cfg.gasUrl || "").trim();
-      if (!url) throw new Error("gasUrl kosong di db-backend-config.js");
-      var rows = JSON.parse(document.getElementById("json").value.trim());
-      if (!Array.isArray(rows)) throw new Error("JSON harus array");
-      var res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "importBulk",
-          table: document.getElementById("table").value,
-          rows: rows,
-          password: document.getElementById("pw").value,
-        }),
-      });
-      var data = await res.json();
-      if (!data || !data.ok) throw new Error((data && data.error) || "Gagal");
-      msg.textContent = "Selesai: " + (data.imported || rows.length) + " baris → " + document.getElementById("table").value;
-    } catch (e) {
-      msg.textContent = e.message || String(e);
+
+    function setProgress(done, total, phase) {
+      progressWrap.style.display = "block";
+      var pct = total ? Math.round((done / total) * 100) : 0;
+      progressBar.style.width = pct + "%";
+      progressText.textContent =
+        (phase || "Memproses") +
+        " record ke-" +
+        done +
+        " dari " +
+        total +
+        " (" +
+        pct +
+        "%)";
     }
-  };
+
+    function normalizeRows(raw) {
+      if (!Array.isArray(raw)) throw new Error("JSON harus array");
+      var unwrap = document.getElementById("unwrapRowJson").checked;
+      var rows = raw.map(function (r, i) {
+        var obj = r;
+        if (unwrap && r && typeof r === "object" && r.row_json) obj = r.row_json;
+        if (!obj || typeof obj !== "object") {
+          throw new Error("Baris ke-" + (i + 1) + " bukan object");
+        }
+        if (obj.id == null || obj.id === "") {
+          throw new Error("Baris ke-" + (i + 1) + " tidak punya field id");
+        }
+        return obj;
+      });
+      return rows;
+    }
+
+    btnStop.onclick = function () {
+      stopFlag = true;
+      btnStop.disabled = true;
+      msg.textContent = (msg.textContent || "") + "\nStop diminta — menunggu batch berjalan selesai…";
+    };
+
+    document.getElementById("go").onclick = async function () {
+      stopFlag = false;
+      btnStop.hidden = false;
+      btnStop.disabled = false;
+      msg.textContent = "";
+      setProgress(0, 0, "Menyiapkan");
+
+      try {
+        var cfg = window.SH_DB_BACKEND_CONFIG || {};
+        var url = String(cfg.gasUrl || "").trim();
+        if (!url) throw new Error("gasUrl kosong di db-backend-config.js");
+
+        var raw = JSON.parse(document.getElementById("json").value.trim());
+        var rows = normalizeRows(raw);
+        var total = rows.length;
+        if (!total) throw new Error("Array kosong");
+
+        var batchSize = parseInt(document.getElementById("batchSize").value, 10) || 80;
+        if (batchSize < 10) batchSize = 10;
+        if (batchSize > 500) batchSize = 500;
+
+        var table = document.getElementById("table").value;
+        var password = document.getElementById("pw").value;
+        var imported = 0;
+        var batchNo = 0;
+        var totalBatches = Math.ceil(total / batchSize);
+
+        setProgress(0, total, "Mulai import");
+
+        for (var start = 0; start < total; start += batchSize) {
+          if (stopFlag) {
+            msg.textContent =
+              "Dihentikan. Sudah terkirim " +
+              imported +
+              " dari " +
+              total +
+              " record ke tab " +
+              table +
+              ".";
+            break;
+          }
+          batchNo++;
+          var chunk = rows.slice(start, start + batchSize);
+          var from = start + 1;
+          var to = start + chunk.length;
+          setProgress(to, total, "Batch " + batchNo + "/" + totalBatches + " — mengirim");
+
+          var res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+              action: "importBulk",
+              table: table,
+              rows: chunk,
+              password: password,
+            }),
+          });
+          var data = await res.json();
+          if (!data || !data.ok) {
+            throw new Error(
+              (data && data.error) ||
+                "Gagal pada batch " +
+                  batchNo +
+                  " (record " +
+                  from +
+                  "–" +
+                  to +
+                  ")"
+            );
+          }
+          imported += data.imported != null ? data.imported : chunk.length;
+          setProgress(Math.min(imported, total), total, "Batch " + batchNo + "/" + totalBatches + " selesai");
+        }
+
+        if (!stopFlag) {
+          setProgress(total, total, "Selesai");
+          msg.textContent =
+            "Selesai: " +
+            imported +
+            " baris → tab \"" +
+            table +
+            "\" (" +
+            totalBatches +
+            " batch).";
+        }
+      } catch (e) {
+        msg.textContent = e.message || String(e);
+      } finally {
+        btnStop.hidden = true;
+        btnStop.disabled = false;
+      }
+    };
+  })();
   </script>
 </body>
 </html>
