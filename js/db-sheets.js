@@ -633,6 +633,181 @@
       };
     },
 
+    /** Siswa: daftar sesi absensi aktif (mode Sheets) */
+    listActiveAttendanceSessions: async function () {
+      var rows = await SheetsDB.listRows("attendance_sessions", { limit: 300 });
+      return (rows || []).filter(function (r) {
+        return r.active === true || r.active === "true" || r.active === 1 || r.active === "1";
+      });
+    },
+
+    /** Siswa: rekap absensi milik user login */
+    myAttendanceRecords: async function () {
+      var s = readSession();
+      if (!s) return [];
+      var uid = String(s.user_id || "");
+      var name = String(s.name || "").toLowerCase().trim();
+      var rows = await SheetsDB.listRows("attendance_records", { limit: 1000 });
+      return (rows || []).filter(function (r) {
+        if (uid && String(r.user_id || "") === uid) return true;
+        if (name && String(r.student_name || "").toLowerCase().trim() === name) return true;
+        return false;
+      });
+    },
+
+    /** Siswa: check-in ke sesi */
+    submitAttendanceCheckin: async function (opts) {
+      opts = opts || {};
+      var sessionId = opts.sessionId || opts.session_id;
+      var note = opts.note || "";
+      var s = readSession();
+      if (!s) throw new Error("Login dulu");
+      var prof = await SheetsDB.getMyProfile();
+      if (!prof || !prof.linked_student_name) throw new Error("Tautkan nama siswa di Profil dulu");
+
+      var sessions = await SheetsDB.listRows("attendance_sessions", { limit: 300 });
+      var sess = (sessions || []).find(function (x) {
+        return String(x.id) === String(sessionId);
+      });
+      if (!sess) throw new Error("Sesi absensi tidak ditemukan");
+      if (!(sess.active === true || sess.active === "true" || sess.active === 1 || sess.active === "1")) {
+        throw new Error("Sesi absensi tidak aktif");
+      }
+
+      function jakartaMinutes() {
+        var fmt = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Jakarta",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+        var parts = Object.fromEntries(
+          fmt.formatToParts(new Date()).map(function (p) {
+            return [p.type, p.value];
+          })
+        );
+        return parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10);
+      }
+      function toMin(t) {
+        var p = String(t || "0:0").slice(0, 5).split(":");
+        return parseInt(p[0], 10) * 60 + parseInt(p[1] || 0, 10);
+      }
+
+      var mins = jakartaMinutes();
+      var ci0 = toMin(sess.checkin_start);
+      var ci1 = toMin(sess.checkin_end);
+      var checkin_status = "on_time";
+      if (mins > ci1) {
+        if (sess.allow_late === true || sess.allow_late === "true" || sess.allow_late === 1 || sess.allow_late === "1") {
+          checkin_status = "late";
+        } else {
+          throw new Error("Waktu check-in sudah ditutup. Admin tidak mengizinkan absen terlambat.");
+        }
+      } else if (mins < ci0) {
+        throw new Error("Belum masuk waktu check-in.");
+      }
+
+      var uid = String(s.user_id || ("sheets-" + (s.email || "user")));
+      var allRec = await SheetsDB.listRows("attendance_records", { limit: 1000 });
+      var existing = (allRec || []).find(function (r) {
+        return String(r.session_id) === String(sessionId) && String(r.user_id || "") === uid;
+      });
+      if (!existing) {
+        existing = (allRec || []).find(function (r) {
+          return (
+            String(r.session_id) === String(sessionId) &&
+            String(r.student_name || "").toLowerCase().trim() ===
+              String(prof.linked_student_name).toLowerCase().trim()
+          );
+        });
+      }
+      if (existing && existing.checkin_at) throw new Error("Sudah check-in untuk sesi ini");
+
+      var now = new Date().toISOString();
+      var row = {
+        id: existing && existing.id ? existing.id : "ar-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        session_id: sessionId,
+        user_id: uid,
+        student_name: prof.linked_student_name,
+        angkatan_year: String(prof.linked_angkatan_year || s.angkatan_year || ""),
+        class_code: String(prof.linked_class_code || s.class_code || ""),
+        email: s.email || "",
+        checkin_at: now,
+        checkin_note: String(note || "").slice(0, 120),
+        checkin_status: checkin_status,
+        updated_at: now,
+      };
+      if (existing) {
+        row.checkout_at = existing.checkout_at || null;
+        row.checkout_note = existing.checkout_note || "";
+        row.checkout_status = existing.checkout_status || "";
+      }
+      return SheetsDB.upsertRow("attendance_records", row);
+    },
+
+    /** Siswa: check-out dari sesi */
+    submitAttendanceCheckout: async function (opts) {
+      opts = opts || {};
+      var sessionId = opts.sessionId || opts.session_id;
+      var note = opts.note || "";
+      var s = readSession();
+      if (!s) throw new Error("Login dulu");
+      var uid = String(s.user_id || ("sheets-" + (s.email || "user")));
+      var name = String(s.name || "").toLowerCase().trim();
+
+      var allRec = await SheetsDB.listRows("attendance_records", { limit: 1000 });
+      var existing = (allRec || []).find(function (r) {
+        return String(r.session_id) === String(sessionId) && String(r.user_id || "") === uid;
+      });
+      if (!existing && name) {
+        existing = (allRec || []).find(function (r) {
+          return (
+            String(r.session_id) === String(sessionId) &&
+            String(r.student_name || "").toLowerCase().trim() === name
+          );
+        });
+      }
+      if (!existing || !existing.checkin_at) throw new Error("Belum check-in");
+      if (existing.checkout_at) throw new Error("Sudah check-out");
+
+      var sessions = await SheetsDB.listRows("attendance_sessions", { limit: 300 });
+      var sess = (sessions || []).find(function (x) {
+        return String(x.id) === String(sessionId);
+      });
+      var checkout_status = "on_time";
+      if (sess) {
+        function jakartaMinutes() {
+          var fmt = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Jakarta",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+          var parts = Object.fromEntries(
+            fmt.formatToParts(new Date()).map(function (p) {
+              return [p.type, p.value];
+            })
+          );
+          return parseInt(parts.hour, 10) * 60 + parseInt(parts.minute, 10);
+        }
+        function toMin(t) {
+          var p = String(t || "0:0").slice(0, 5).split(":");
+          return parseInt(p[0], 10) * 60 + parseInt(p[1] || 0, 10);
+        }
+        var mins = jakartaMinutes();
+        var co1 = toMin(sess.checkout_end);
+        if (mins > co1) checkout_status = "late";
+      }
+
+      var now = new Date().toISOString();
+      var row = Object.assign({}, existing, {
+        checkout_at: now,
+        checkout_note: String(note || "").slice(0, 120),
+        checkout_status: checkout_status,
+        updated_at: now,
+      });
+      return SheetsDB.upsertRow("attendance_records", row);
+    },
 
     // no-op realtime
     subscribeChat: function () {
