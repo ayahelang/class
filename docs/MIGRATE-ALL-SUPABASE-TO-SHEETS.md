@@ -705,6 +705,22 @@ ORDER BY to_jsonb(t)->>'id' NULLS LAST;
 4. Pilih tab, tempel JSON, password admin → **Import bulk**
 5. Status: **record ke-X dari total Y** per batch
 
+
+## Pembuatan tab Sheet otomatis
+
+Backend GAS (`scripts/ClassSheetsBackend.gs`) memakai `ensureTab_()`:
+
+- Jika tab **belum ada** di spreadsheet → **dibuat otomatis** dengan header `id | json | updated_at`
+- Jika tab sudah ada → dipakai apa adanya
+
+Syarat agar import tidak ditolak:
+
+1. Nama tab ada di whitelist `TABS` di `ClassSheetsBackend.gs` (sudah dilengkapi 23+ tab)
+2. **Deploy ulang** Web App GAS (New version) setelah update `ClassSheetsBackend.gs`
+3. Import lewat `tools/data-migrate.html` dengan password admin
+
+Jadi Anda **tidak perlu** membuat 23 tab manual di Google Sheet — cukup deploy GAS terbaru, lalu import per tabel; tab baru akan muncul sendiri.
+
 ## Setelah migrasi
 
 1. `data/db-backend-config.js` → `primary: "sheets"`, `allowSupabase: false`
