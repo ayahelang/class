@@ -1,5 +1,6 @@
 /**
- * Login modal: Angkatan → Nama → Password (default Bismillaah)
+ * Login modal: Angkatan → Nama → Password
+ * Tidak menampilkan password default di UI.
  */
 (function () {
   var directory = null;
@@ -15,7 +16,7 @@
       '<div class="sh-login-panel" role="dialog" aria-labelledby="shLoginTitle">' +
       '  <button type="button" class="sh-login-x" data-close="1" aria-label="Tutup">×</button>' +
       '  <h2 id="shLoginTitle">Login</h2>' +
-      '  <p class="muted" style="font-size:13px;margin:0 0 12px">Pilih angkatan, nama, lalu password. Password awal: <b>Bismillaah</b></p>' +
+      '  <p class="muted" style="font-size:13px;margin:0 0 12px">Pilih angkatan, nama, lalu masukkan password akun Anda.</p>' +
       '  <label class="field"><span>Angkatan</span>' +
       '    <select id="shLoginAngkatan" style="width:100%"><option value="">— memuat —</option></select>' +
       "  </label>" +
@@ -23,7 +24,7 @@
       '    <select id="shLoginName" style="width:100%" disabled><option value="">— pilih angkatan dulu —</option></select>' +
       "  </label>" +
       '  <label class="field"><span>Password</span>' +
-      '    <input type="password" id="shLoginPw" autocomplete="current-password" style="width:100%" placeholder="Bismillaah">' +
+      '    <input type="password" id="shLoginPw" autocomplete="current-password" style="width:100%" placeholder="Password">' +
       "  </label>" +
       '  <p id="shLoginErr" class="muted" style="color:#f5a;" hidden></p>' +
       '  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">' +
@@ -70,49 +71,115 @@
       var m = String(hit.label || "").match(/20\d{2}/);
       if (m) return m[0];
     }
-    return "";
+    var m2 = String(a.label || "").match(/20\d{2}/);
+    return m2 ? m2[0] : "";
+  }
+
+  async function loadFromListRows() {
+    var angkatan = [];
+    var alumni = [];
+    if (!window.GalleryDB) throw new Error("GalleryDB belum siap");
+    if (GalleryDB.listAngkatan) {
+      try {
+        angkatan = (await GalleryDB.listAngkatan({})) || [];
+      } catch (e) {
+        console.warn("listAngkatan", e);
+      }
+    }
+    if (GalleryDB.adminListAlumni) {
+      try {
+        alumni = (await GalleryDB.adminListAlumni()) || [];
+      } catch (e2) {
+        console.warn("adminListAlumni", e2);
+      }
+    }
+    // fallback dari gallery (students)
+    if ((!alumni || !alumni.length) && GalleryDB.fetchGalleryFromDb) {
+      try {
+        var g = await GalleryDB.fetchGalleryFromDb();
+        (g && g.students ? g.students : []).forEach(function (s) {
+          alumni.push({
+            id: s.id || s.name,
+            name: s.name || "",
+            class_code: s.class || s.class_code || "",
+            angkatan_year: s.angkatan || s.year || "",
+            role: s.role || "student",
+          });
+        });
+      } catch (e3) {
+        console.warn("fetchGalleryFromDb", e3);
+      }
+    }
+    return { ok: true, angkatan: angkatan || [], alumni: alumni || [] };
   }
 
   async function loadDirectory() {
-    if (directory) return directory;
+    if (directory && (directory.alumni || []).length) return directory;
+    var lastErr = null;
+    // 1) aksi khusus GAS (jika sudah di-deploy)
     if (window.GalleryDB && GalleryDB.listLoginDirectory) {
-      directory = await GalleryDB.listLoginDirectory();
-      return directory;
+      try {
+        var d = await GalleryDB.listLoginDirectory();
+        if (d && ((d.alumni && d.alumni.length) || (d.angkatan && d.angkatan.length))) {
+          directory = d;
+          return directory;
+        }
+      } catch (e) {
+        lastErr = e;
+        console.warn("listLoginDirectory", e);
+      }
     }
-    var angkatan = [];
-    var alumni = [];
+    // 2) list tab angkatan + alumni (kompatibel GAS lama)
     try {
-      if (GalleryDB.listAngkatan) angkatan = (await GalleryDB.listAngkatan({})) || [];
-    } catch (e) {}
-    try {
-      if (GalleryDB.adminListAlumni) alumni = (await GalleryDB.adminListAlumni()) || [];
-    } catch (e2) {}
-    directory = { ok: true, angkatan: angkatan, alumni: alumni };
+      directory = await loadFromListRows();
+      if ((directory.alumni && directory.alumni.length) || (directory.angkatan && directory.angkatan.length)) {
+        return directory;
+      }
+    } catch (e2) {
+      lastErr = e2;
+    }
+    if (lastErr) throw lastErr;
+    directory = directory || { ok: true, angkatan: [], alumni: [] };
     return directory;
   }
 
   async function fillAngkatan() {
     var sel = document.getElementById("shLoginAngkatan");
-    sel.innerHTML = '<option value="">— pilih angkatan —</option>';
-    var dir = await loadDirectory();
-    var years = {};
-    (dir.angkatan || []).forEach(function (a) {
-      var y = a.year || (String(a.label || "").match(/20\d{2}/) || [])[0] || "";
-      if (y) years[String(y)] = true;
-    });
-    (dir.alumni || []).forEach(function (a) {
-      var y = yearOfAlumni(a, dir.angkatan || []);
-      if (y) years[String(y)] = true;
-    });
-    Object.keys(years)
-      .sort()
-      .reverse()
-      .forEach(function (y) {
+    var err = document.getElementById("shLoginErr");
+    sel.innerHTML = '<option value="">— memuat —</option>';
+    err.hidden = true;
+    try {
+      var dir = await loadDirectory();
+      sel.innerHTML = '<option value="">— pilih angkatan —</option>';
+      var years = {};
+      (dir.angkatan || []).forEach(function (a) {
+        var y = a.year || (String(a.label || "").match(/20\d{2}/) || [])[0] || "";
+        if (y) years[String(y)] = true;
+      });
+      (dir.alumni || []).forEach(function (a) {
+        var y = yearOfAlumni(a, dir.angkatan || []);
+        if (y) years[String(y)] = true;
+      });
+      var keys = Object.keys(years).sort().reverse();
+      if (!keys.length) {
+        err.textContent =
+          "Data angkatan/nama kosong. Pastikan tab Sheet angkatan & alumni sudah diisi, dan Web App GAS di-deploy (Anyone).";
+        err.hidden = false;
+        return;
+      }
+      keys.forEach(function (y) {
         var o = document.createElement("option");
         o.value = y;
         o.textContent = "Angkatan " + y;
         sel.appendChild(o);
       });
+    } catch (e) {
+      sel.innerHTML = '<option value="">— gagal memuat —</option>';
+      err.textContent =
+        (e && e.message) ||
+        "Gagal memuat daftar. Cek koneksi database Sheet / deploy ulang GAS.";
+      err.hidden = false;
+    }
   }
 
   function onAngkatanChange() {
@@ -127,6 +194,11 @@
     list.sort(function (a, b) {
       return String(a.name || "").localeCompare(String(b.name || ""), "id");
     });
+    if (!list.length) {
+      var err = document.getElementById("shLoginErr");
+      err.textContent = "Tidak ada nama untuk angkatan " + year + ".";
+      err.hidden = false;
+    }
     list.forEach(function (a) {
       var o = document.createElement("option");
       o.value = a.id;
@@ -163,7 +235,7 @@
     btn.disabled = true;
     try {
       if (!window.GalleryDB || !GalleryDB.userLoginPassword) {
-        throw new Error("Fitur login belum siap. Deploy ulang GAS ClassSheetsBackend.");
+        throw new Error("Fitur login belum siap. Deploy ulang GAS ClassSheetsBackend (New version, Anyone).");
       }
       var sess = await GalleryDB.userLoginPassword({
         alumni_id: alumniId,
@@ -192,13 +264,10 @@
   }
 
   function open() {
+    directory = null; // refresh tiap buka
     ensureModal();
     modal.hidden = false;
-    fillAngkatan().catch(function (e) {
-      var err = document.getElementById("shLoginErr");
-      err.textContent = e.message || String(e);
-      err.hidden = false;
-    });
+    fillAngkatan();
   }
 
   function close() {

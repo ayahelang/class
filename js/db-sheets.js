@@ -420,9 +420,18 @@
     },
 
     listLoginDirectory: async function () {
-      var data = await gasCall("listLoginDirectory", {});
-      if (!data || !data.ok) throw new Error((data && data.error) || "Gagal muat direktori login");
-      return data;
+      // Prefer aksi khusus; jika GAS belum di-deploy ulang, fallback list tab
+      try {
+        var data = await gasCall("listLoginDirectory", {});
+        if (data && data.ok) return data;
+      } catch (e) {
+        console.warn("listLoginDirectory GAS", e);
+      }
+      var angkatan = [];
+      var alumni = [];
+      try { angkatan = (await SheetsDB.listRows("angkatan", { limit: 200 })) || []; } catch (e1) {}
+      try { alumni = (await SheetsDB.listRows("alumni", { limit: 5000 })) || []; } catch (e2) {}
+      return { ok: true, angkatan: angkatan, alumni: alumni };
     },
 
     userLoginPassword: async function (opts) {
