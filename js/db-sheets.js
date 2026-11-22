@@ -7,13 +7,21 @@
   var LS_MODE = "sh_class_db_mode_v1";
   var LS_SESSION = "sh_class_sheets_session_v1";
 
+  // Migrasi: jangan pakai localStorage untuk sesi
+  try {
+    if (localStorage.getItem(LS_SESSION)) {
+      localStorage.removeItem(LS_SESSION);
+    }
+  } catch (eMig) {}
+
+
   function cfg() {
     return global.SH_DB_BACKEND_CONFIG || {};
   }
 
   function getMode() {
     try {
-      var m = localStorage.getItem(LS_MODE);
+      var m = sessionStorage.getItem(LS_MODE);
       if (m === "sheets" || m === "supabase" || m === "firebase") return m;
     } catch (e) {}
     return cfg().primary || "sheets";
@@ -21,7 +29,7 @@
 
   function setMode(m) {
     try {
-      localStorage.setItem(LS_MODE, m);
+      sessionStorage.setItem(LS_MODE, m);
     } catch (e) {}
     try {
       cfg().primary = m;
@@ -30,7 +38,7 @@
 
   function supabaseAllowed() {
     try {
-      var v = localStorage.getItem("sh_class_allow_supabase");
+      var v = sessionStorage.getItem("sh_class_allow_supabase");
       if (v === "1") return true;
       if (v === "0") return false;
     } catch (e) {}
@@ -39,14 +47,14 @@
 
   function setSupabaseAllowed(on) {
     try {
-      localStorage.setItem("sh_class_allow_supabase", on ? "1" : "0");
+      sessionStorage.setItem("sh_class_allow_supabase", on ? "1" : "0");
     } catch (e) {}
     cfg().allowSupabase = !!on;
   }
 
   function firebaseAllowed() {
     try {
-      var v = localStorage.getItem("sh_class_allow_firebase");
+      var v = sessionStorage.getItem("sh_class_allow_firebase");
       if (v === "1") return true;
       if (v === "0") return false;
     } catch (e) {}
@@ -55,7 +63,7 @@
 
   function setFirebaseAllowed(on) {
     try {
-      localStorage.setItem("sh_class_allow_firebase", on ? "1" : "0");
+      sessionStorage.setItem("sh_class_allow_firebase", on ? "1" : "0");
     } catch (e) {}
     cfg().allowFirebase = !!on;
   }
@@ -100,9 +108,9 @@
 
   function readSession() {
     try {
-      var o = JSON.parse(localStorage.getItem(LS_SESSION) || "null");
+      var o = JSON.parse(sessionStorage.getItem(LS_SESSION) || "null");
       if (!o || !o.exp || Date.now() > o.exp) {
-        localStorage.removeItem(LS_SESSION);
+        sessionStorage.removeItem(LS_SESSION);
         return null;
       }
       return o;
@@ -127,13 +135,13 @@
       class_code: o.class_code || "",
       must_change_password: !!o.must_change_password,
     };
-    localStorage.setItem(LS_SESSION, JSON.stringify(s));
+    sessionStorage.setItem(LS_SESSION, JSON.stringify(s));
     return s;
   }
 
   function clearSession() {
     try {
-      localStorage.removeItem(LS_SESSION);
+      sessionStorage.removeItem(LS_SESSION);
     } catch (e) {}
   }
 
@@ -558,14 +566,14 @@
       });
       // field tambahan untuk profil / absensi
       try {
-        var full = JSON.parse(localStorage.getItem(LS_SESSION) || "{}");
+        var full = JSON.parse(sessionStorage.getItem(LS_SESSION) || "{}");
         full.user_id = u.id;
         full.alumni_id = u.alumni_id || "";
         full.angkatan_year = u.angkatan_year || "";
         full.class_code = u.class_code || "";
         full.must_change_password = !!u.must_change_password;
         full.token = data.token;
-        localStorage.setItem(LS_SESSION, JSON.stringify(full));
+        sessionStorage.setItem(LS_SESSION, JSON.stringify(full));
         sess = full;
       } catch (e) {}
       return sess;
@@ -583,7 +591,7 @@
       if (!data || !data.ok) throw new Error((data && data.error) || "Gagal ganti password");
       try {
         s.must_change_password = false;
-        localStorage.setItem(LS_SESSION, JSON.stringify(s));
+        sessionStorage.setItem(LS_SESSION, JSON.stringify(s));
       } catch (e2) {}
       return true;
     },
