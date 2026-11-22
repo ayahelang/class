@@ -35,16 +35,18 @@
     function pick(name) {
       return function () {
         var args = arguments;
-        if (useSheets() && typeof S[name] === "function") {
-          return S[name].apply(S, args);
+        // Mode sheets: JANGAN pernah jatuh ke Supabase (hindari quota/egress error)
+        if (useSheets()) {
+          if (typeof S[name] === "function") return S[name].apply(S, args);
+          // stub aman
+          if (name.indexOf("list") === 0 || name.indexOf("fetch") === 0) return Promise.resolve([]);
+          if (name.indexOf("get") === 0) return Promise.resolve(null);
+          return Promise.resolve(null);
         }
-        // Supabase hanya jika diizinkan
         if (mode() === "supabase" || (name === "signInWithGoogle" && S.supabaseAllowed && S.supabaseAllowed())) {
           if (typeof SB[name] === "function") return SB[name].apply(null, args);
         }
-        if (useSheets() && typeof S[name] === "function") return S[name].apply(S, args);
         if (typeof SB[name] === "function") {
-          // fallback baca supabase hanya jika allow
           if (S.supabaseAllowed && S.supabaseAllowed()) return SB[name].apply(null, args);
         }
         if (typeof S[name] === "function") return S[name].apply(S, args);
@@ -80,6 +82,11 @@
       "listAngkatan",
       "adminListWebsites",
       "listVideos",
+      "listVideoCategories",
+      "getStatsSummary",
+      "getStatsTimeseries",
+      "trackEvent",
+      "joinPresenceOnline",
       "listVideosAdmin",
       "listDesigns",
       "listDesignsPublic",

@@ -82,14 +82,7 @@
       if (!session || !session.user) {
         document.body.classList.remove("sh-user-logged");
         document.body.classList.add("sh-user-guest");
-        // Mode database primer: jangan tampilkan Login Google (hemat ruang; Admin tetap di nav)
-        if (!googleLoginAllowed()) {
-          bar.innerHTML = "";
-          bar.hidden = true;
-          bar.setAttribute("aria-hidden", "true");
-          hideAdminNavLinks(false);
-          return;
-        }
+        // Selalu tampilkan Login (modal password). Jangan disembunyikan di mode Sheet.
         bar.hidden = false;
         bar.removeAttribute("aria-hidden");
         hideAdminNavLinks(false);

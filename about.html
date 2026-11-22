@@ -17,7 +17,7 @@
   <link rel="dns-prefetch" href="https://www.googletagmanager.com">
   <link rel="dns-prefetch" href="https://upnnjidobuujhvevfyaa.supabase.co">
   <!-- LCP: discover foto di dokumen awal + prioritas tinggi -->
-  <link rel="preload" as="image" href="assets/teddy-mulyana.webp" type="image/webp" fetchpriority="high">
+  <link rel="preload" as="image" href="assets/teddy-mulyana.jpg" type="image/jpeg" fetchpriority="high">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Silverhawk Gallery">
   <meta property="og:title" content="About — Teddy Mulyana · Silverhawk">
@@ -66,8 +66,7 @@
     <section class="about-hero-card">
       <div class="about-photo-wrap">
         <picture>
-          <source srcset="assets/teddy-mulyana.webp" type="image/webp">
-          <img class="about-photo" src="assets/teddy-mulyana.jpg" width="320" height="320" alt="Foto Teddy Mulyana" decoding="async" fetchpriority="high">
+          <img class="about-photo" src="assets/teddy-mulyana.jpg" width="320" height="320" alt="Foto Teddy Mulyana" decoding="async" fetchpriority="high" onerror="this.onerror=null;this.src='assets/teddy-mulyana.jpg'">
         </picture>
       </div>
       <div class="about-hero-copy">
@@ -341,9 +340,15 @@
     });
   }
   </script>
-  <script defer src="js/login-modal.js"></script>
+
   <script defer src="data/db-backend-config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="data/supabase-config.js"></script>
+  <script defer src="js/db.js"></script>
   <script defer src="js/db-sheets.js"></script>
   <script defer src="js/db-router-class.js"></script>
+  <script defer src="js/auth-ui.js"></script>
+  <script defer src="js/login-modal.js"></script>
+
 </body>
 </html>

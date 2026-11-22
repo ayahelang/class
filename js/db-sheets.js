@@ -427,6 +427,96 @@
       };
     },
 
+
+    listVideoCategories: async function () {
+      var cats = [];
+      try {
+        cats = (await SheetsDB.listRows("video_categories", { limit: 200 })) || [];
+      } catch (e) {}
+      if (cats.length) return cats;
+      // turunkan dari videos
+      var vids = [];
+      try {
+        vids = (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+      } catch (e2) {}
+      var map = {};
+      (vids || []).forEach(function (v) {
+        var c = v.category || v.category_name || "Umum";
+        var id = v.category_id || String(c).toLowerCase().replace(/\s+/g, "-");
+        if (!map[id]) map[id] = { id: id, name: c, label: c };
+      });
+      return Object.keys(map).map(function (k) { return map[k]; });
+    },
+
+    getStatsSummary: async function () {
+      var alumni = [], websites = [], videos = [], designs = [], events = [];
+      try { alumni = (await SheetsDB.listRows("alumni", { limit: 5000 })) || []; } catch (e) {}
+      try { websites = (await SheetsDB.listRows("websites", { limit: 5000 })) || []; } catch (e) {}
+      try { videos = (await SheetsDB.listRows("videos", { limit: 5000 })) || []; } catch (e) {}
+      try { designs = (await SheetsDB.listRows("designs", { limit: 5000 })) || []; } catch (e) {}
+      try { events = (await SheetsDB.listRows("events", { limit: 5000 })) || []; } catch (e) {}
+      var love = 0, comments = 0, visits = 0;
+      try {
+        var reacts = (await SheetsDB.listRows("reactions", { limit: 5000 })) || [];
+        reacts.forEach(function (r) {
+          if (r.reaction_type === "love") love++;
+          if (r.reaction_type === "comment") comments++;
+        });
+      } catch (eR) {}
+      (events || []).forEach(function (ev) {
+        if (String(ev.event_type || "") === "visit") visits++;
+      });
+      return {
+        students: alumni.length,
+        websites: websites.length,
+        videos: videos.length,
+        designs: designs.length,
+        loves: love,
+        comments: comments,
+        visits: visits,
+        online: 0,
+      };
+    },
+
+    getStatsTimeseries: async function (days) {
+      days = days || 14;
+      var events = [];
+      try { events = (await SheetsDB.listRows("events", { limit: 5000 })) || []; } catch (e) {}
+      var buckets = {};
+      var now = new Date();
+      for (var i = days - 1; i >= 0; i--) {
+        var d = new Date(now.getTime() - i * 86400000);
+        var key = d.toISOString().slice(0, 10);
+        buckets[key] = 0;
+      }
+      (events || []).forEach(function (ev) {
+        var t = String(ev.created_at || "").slice(0, 10);
+        if (buckets[t] != null) buckets[t]++;
+      });
+      return Object.keys(buckets).sort().map(function (k) {
+        return { date: k, count: buckets[k] };
+      });
+    },
+
+    trackEvent: async function (type, meta) {
+      try {
+        await SheetsDB.upsertRow("events", {
+          id: "ev-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+          event_type: type || "visit",
+          meta: meta || {},
+          created_at: new Date().toISOString(),
+        });
+      } catch (e) {}
+      return true;
+    },
+
+    joinPresenceOnline: async function (cb) {
+      if (typeof cb === "function") {
+        try { cb(1); } catch (e) {}
+      }
+      return { unsubscribe: function () {} };
+    },
+
     listLoginDirectory: async function () {
       // Prefer aksi khusus; jika GAS belum di-deploy ulang, fallback list tab
       try {
