@@ -79,6 +79,15 @@
       "adminListAlumni",
       "listAngkatan",
       "adminListWebsites",
+      "listVideos",
+      "listVideosAdmin",
+      "listDesigns",
+      "listDesignsPublic",
+      "fetchGalleryFromDb",
+      "listLoginDirectory",
+      "userLoginPassword",
+      "userChangePassword",
+      "adminResetUserPassword",
       "subscribeChat",
       "subscribeAttendanceLive",
     ];
@@ -207,6 +216,13 @@
       if (S.adminLoginPassword) return S.adminLoginPassword(pw);
       return Promise.reject(new Error("Sheets backend belum siap"));
     };
+
+    G.fetchGalleryFromDb = function () {
+      if (useSheets() && S.fetchGalleryFromDb) return S.fetchGalleryFromDb.apply(S, arguments);
+      if (typeof SB.fetchGalleryFromDb === "function") return SB.fetchGalleryFromDb.apply(null, arguments);
+      return Promise.resolve({ meta: {}, students: [] });
+    };
+    G.fetchGalleryData = G.fetchGalleryFromDb;
 
     G.getBackendMode = function () {
       return mode();

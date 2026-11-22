@@ -150,9 +150,17 @@
       if (!s) return null;
       return {
         user: {
-          id: "sheets-" + (s.email || "admin"),
+          id: s.user_id || ("sheets-" + (s.email || "admin")),
           email: s.email,
-          user_metadata: { full_name: s.name, name: s.name },
+          user_metadata: {
+            full_name: s.name,
+            name: s.name,
+            role: s.role || "student",
+            must_change_password: !!s.must_change_password,
+            alumni_id: s.alumni_id || "",
+            angkatan_year: s.angkatan_year || "",
+            class_code: s.class_code || "",
+          },
         },
       };
     },
@@ -340,6 +348,167 @@
     listVideosAdmin: async function () {
       return SheetsDB.listRows("videos", { limit: 500 });
     },
+    listVideos: async function () {
+      return SheetsDB.listRows("videos", { limit: 2000 });
+    },
+    listDesigns: async function () {
+      return SheetsDB.listRows("designs", { limit: 2000 });
+    },
+    listDesignsPublic: async function () {
+      var rows = await SheetsDB.listRows("designs", { limit: 2000 });
+      return (rows || []).filter(function (r) {
+        return r.active !== false;
+      });
+    },
+
+    /** Bangun struktur gallery dari tab Sheet (alumni + websites) */
+    fetchGalleryFromDb: async function () {
+      var alumni = [];
+      var websites = [];
+      var angkatan = [];
+      try {
+        alumni = (await SheetsDB.listRows("alumni", { limit: 5000 })) || [];
+      } catch (e1) {}
+      try {
+        websites = (await SheetsDB.listRows("websites", { limit: 5000 })) || [];
+      } catch (e2) {}
+      try {
+        angkatan = (await SheetsDB.listRows("angkatan", { limit: 200 })) || [];
+      } catch (e3) {}
+
+      var angById = {};
+      (angkatan || []).forEach(function (a) {
+        if (a && a.id) angById[String(a.id)] = a;
+      });
+
+      var worksByAlumni = {};
+      (websites || []).forEach(function (w) {
+        var aid = String(w.alumni_id || w.owner_alumni_id || "");
+        if (!aid) return;
+        if (!worksByAlumni[aid]) worksByAlumni[aid] = [];
+        worksByAlumni[aid].push({
+          id: w.id,
+          title: w.title || w.name || "Karya",
+          url: w.url || w.link || "",
+          category: w.category || "Lainnya",
+        });
+      });
+
+      var students = (alumni || []).map(function (al) {
+        var ang = angById[String(al.angkatan_id || "")] || {};
+        var year =
+          al.angkatan_year ||
+          al.year ||
+          ang.year ||
+          (String(ang.label || "").match(/20\d{2}/) || [])[0] ||
+          "";
+        return {
+          id: al.id,
+          name: al.name || al.display_name || "",
+          class: al.class_code || al.class || "",
+          angkatan: String(year || ""),
+          year: String(year || ""),
+          role: al.role || "student",
+          works: worksByAlumni[String(al.id)] || [],
+        };
+      });
+
+      return {
+        meta: { source: "sheets", updated_at: new Date().toISOString() },
+        students: students,
+      };
+    },
+
+    listLoginDirectory: async function () {
+      var data = await gasCall("listLoginDirectory", {});
+      if (!data || !data.ok) throw new Error((data && data.error) || "Gagal muat direktori login");
+      return data;
+    },
+
+    userLoginPassword: async function (opts) {
+      opts = opts || {};
+      var data = await gasCall("userLogin", {
+        name: opts.name || "",
+        alumni_id: opts.alumni_id || "",
+        angkatan_year: opts.angkatan_year || "",
+        class_code: opts.class_code || "",
+        role: opts.role || "student",
+        password: opts.password || "",
+      });
+      if (!data || !data.ok) throw new Error((data && data.error) || "Login gagal");
+      var u = data.user || {};
+      var sess = {
+        token: data.token,
+        email: u.email || (u.name || "user") + "@sheets.local",
+        name: u.name || "User",
+        role: u.role || "student",
+        user_id: u.id,
+        alumni_id: u.alumni_id || "",
+        angkatan_year: u.angkatan_year || "",
+        class_code: u.class_code || "",
+        must_change_password: !!u.must_change_password,
+        at: Date.now(),
+      };
+      try {
+        localStorage.setItem(LS_SESSION, JSON.stringify(sess));
+      } catch (e) {}
+      return sess;
+    },
+
+    userChangePassword: async function (opts) {
+      opts = opts || {};
+      var s = readSession() || {};
+      var data = await gasCall("userChangePassword", {
+        token: s.token || "",
+        user_id: s.user_id || "",
+        old_password: opts.old_password || "",
+        new_password: opts.new_password || "",
+      });
+      if (!data || !data.ok) throw new Error((data && data.error) || "Gagal ganti password");
+      try {
+        s.must_change_password = false;
+        localStorage.setItem(LS_SESSION, JSON.stringify(s));
+      } catch (e2) {}
+      return true;
+    },
+
+    adminResetUserPassword: async function (opts) {
+      opts = opts || {};
+      var data = await gasCall("adminResetUserPassword", {
+        password: opts.admin_password || opts.password || "",
+        user_id: opts.user_id || "",
+        alumni_id: opts.alumni_id || "",
+        display_name: opts.display_name || opts.name || "",
+        angkatan_year: opts.angkatan_year || "",
+        class_code: opts.class_code || "",
+        role: opts.role || "student",
+        new_password: opts.new_password || "Bismillaah",
+      });
+      if (!data || !data.ok) throw new Error((data && data.error) || "Reset gagal");
+      return data;
+    },
+
+    isCurrentUserAdmin: async function () {
+      var s = readSession();
+      if (!s) return false;
+      return s.role === "admin" || String(s.email || "").indexOf("admin") === 0;
+    },
+
+    getMyProfile: async function () {
+      var s = readSession();
+      if (!s) return null;
+      return {
+        id: s.user_id || "sheets-user",
+        display_name: s.name,
+        linked_student_name: s.name,
+        linked_angkatan_year: s.angkatan_year || null,
+        linked_class_code: s.class_code || "",
+        linked_alumni_id: s.alumni_id || null,
+        must_change_password: !!s.must_change_password,
+        role: s.role || "student",
+      };
+    },
+
 
     // no-op realtime
     subscribeChat: function () {

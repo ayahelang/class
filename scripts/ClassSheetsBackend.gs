@@ -37,6 +37,7 @@ var TABS = [
   "video_categories",
   "videos",
   "websites",
+  "users",
   "_meta",
 ];
 
@@ -55,6 +56,10 @@ function doPost(e) {
     }
     var action = String(body.action || "");
     if (action === "adminLogin") return adminLogin_(body);
+    if (action === "userLogin") return userLogin_(body);
+    if (action === "adminResetUserPassword") return adminResetUserPassword_(body);
+    if (action === "userChangePassword") return userChangePassword_(body);
+    if (action === "listLoginDirectory") return listLoginDirectory_(body);
     if (action === "list") return list_(body);
     if (action === "upsert") return upsert_(body);
     if (action === "importBulk") return importBulk_(body);
@@ -380,4 +385,211 @@ function fixUnmergeChatTabs() {
     } catch (e) {}
   });
   Logger.log("unmerge done");
+}
+
+/** SHA-256 hex */
+function hashPw_(plain) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(plain || ""), Utilities.Charset.UTF_8);
+  return raw.map(function (b) {
+    var v = (b < 0 ? b + 256 : b).toString(16);
+    return v.length === 1 ? "0" + v : v;
+  }).join("");
+}
+
+var DEFAULT_USER_PASSWORD = "Bismillaah";
+
+function findUserRow_(sh, pred) {
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var values = sh.getRange(2, 1, last, 3).getValues();
+  for (var i = 0; i < values.length; i++) {
+    var id = values[i][0];
+    var js = values[i][1];
+    if (!id) continue;
+    var obj = {};
+    try { obj = JSON.parse(js); } catch (e) { continue; }
+    obj.id = obj.id || id;
+    if (pred(obj)) return { sheetRow: i + 2, user: obj };
+  }
+  return null;
+}
+
+/** Direktori login: angkatan + alumni (untuk dropdown) */
+function listLoginDirectory_(body) {
+  var angkatan = [];
+  var alumni = [];
+  try {
+    var shA = ensureTab_("angkatan");
+    var lastA = shA.getLastRow();
+    if (lastA >= 2) {
+      var va = shA.getRange(2, 1, lastA, 3).getValues();
+      for (var i = 0; i < va.length; i++) {
+        try {
+          var o = JSON.parse(va[i][1] || "{}");
+          o.id = o.id || va[i][0];
+          angkatan.push(o);
+        } catch (e1) {}
+      }
+    }
+  } catch (eA) {}
+  try {
+    var shU = ensureTab_("alumni");
+    var lastU = shU.getLastRow();
+    if (lastU >= 2) {
+      var vu = shU.getRange(2, 1, lastU, 3).getValues();
+      for (var j = 0; j < vu.length; j++) {
+        try {
+          var a = JSON.parse(vu[j][1] || "{}");
+          a.id = a.id || vu[j][0];
+          alumni.push({
+            id: a.id,
+            name: a.name || a.display_name || "",
+            class_code: a.class_code || a.class || "",
+            angkatan_id: a.angkatan_id || "",
+            angkatan_year: a.angkatan_year || a.year || "",
+            role: a.role || "student",
+          });
+        } catch (e2) {}
+      }
+    }
+  } catch (eU) {}
+  return json_({ ok: true, angkatan: angkatan, alumni: alumni });
+}
+
+/**
+ * Login siswa/pengajar: angkatan + nama + password
+ * Default password pertama: Bismillaah → must_change_password
+ */
+function userLogin_(body) {
+  var name = String(body.name || body.display_name || "").trim();
+  var angkatanYear = String(body.angkatan_year || body.year || "").trim();
+  var classCode = String(body.class_code || "").trim();
+  var alumniId = String(body.alumni_id || "").trim();
+  var password = String(body.password || "");
+  if (!name && !alumniId) return json_({ ok: false, error: "Nama / alumni wajib" });
+  if (!password) return json_({ ok: false, error: "Password wajib" });
+
+  var sh = ensureTab_("users");
+  var found = findUserRow_(sh, function (u) {
+    if (alumniId && String(u.alumni_id || "") === alumniId) return true;
+    var sameName = String(u.display_name || u.name || "").toLowerCase() === name.toLowerCase();
+    var sameYear = !angkatanYear || String(u.angkatan_year || "") === angkatanYear;
+    var sameClass = !classCode || String(u.class_code || "") === classCode;
+    return sameName && sameYear && sameClass;
+  });
+
+  var user = found ? found.user : null;
+  if (!user) {
+    // buat user baru dari alumni (password default)
+    user = {
+      id: alumniId || Utilities.getUuid(),
+      alumni_id: alumniId || "",
+      display_name: name,
+      name: name,
+      angkatan_year: angkatanYear,
+      class_code: classCode,
+      role: String(body.role || "student"),
+      password_hash: hashPw_(DEFAULT_USER_PASSWORD),
+      must_change_password: true,
+      active: true,
+      created_at: new Date().toISOString(),
+    };
+    // hanya izinkan password default untuk user baru
+    if (hashPw_(password) !== user.password_hash) {
+      return json_({ ok: false, error: "Password salah. Password awal: Bismillaah" });
+    }
+    upsertRow_("users", user);
+  } else {
+    if (user.active === false) return json_({ ok: false, error: "Akun nonaktif" });
+    var expect = user.password_hash || hashPw_(DEFAULT_USER_PASSWORD);
+    if (hashPw_(password) !== expect) {
+      Utilities.sleep(300);
+      return json_({ ok: false, error: "Password salah" });
+    }
+  }
+
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put(
+    "tok_" + token,
+    JSON.stringify({
+      role: user.role || "student",
+      name: user.display_name || user.name,
+      user_id: user.id,
+      alumni_id: user.alumni_id || "",
+    }),
+    28800
+  );
+  return json_({
+    ok: true,
+    token: token,
+    user: {
+      id: user.id,
+      name: user.display_name || user.name,
+      email: user.google_email || "",
+      role: user.role || "student",
+      alumni_id: user.alumni_id || "",
+      angkatan_year: user.angkatan_year || "",
+      class_code: user.class_code || "",
+      must_change_password: !!user.must_change_password,
+    },
+  });
+}
+
+function adminResetUserPassword_(body) {
+  var expected = props_().getProperty("ADMIN_PASSWORD");
+  if (String(body.password || body.admin_password || "") !== expected) {
+    return json_({ ok: false, error: "Password admin salah" });
+  }
+  var userId = String(body.user_id || body.id || "").trim();
+  var alumniId = String(body.alumni_id || "").trim();
+  var newPw = String(body.new_password || DEFAULT_USER_PASSWORD);
+  var sh = ensureTab_("users");
+  var found = findUserRow_(sh, function (u) {
+    if (userId && String(u.id) === userId) return true;
+    if (alumniId && String(u.alumni_id || "") === alumniId) return true;
+    return false;
+  });
+  if (!found) {
+    // buat user stub
+    var u = {
+      id: userId || alumniId || Utilities.getUuid(),
+      alumni_id: alumniId || userId || "",
+      display_name: String(body.display_name || body.name || "User"),
+      name: String(body.display_name || body.name || "User"),
+      angkatan_year: String(body.angkatan_year || ""),
+      class_code: String(body.class_code || ""),
+      role: String(body.role || "student"),
+      password_hash: hashPw_(newPw),
+      must_change_password: true,
+      active: true,
+      created_at: new Date().toISOString(),
+    };
+    upsertRow_("users", u);
+    return json_({ ok: true, reset: true, created: true, user_id: u.id });
+  }
+  found.user.password_hash = hashPw_(newPw);
+  found.user.must_change_password = true;
+  upsertRow_("users", found.user);
+  return json_({ ok: true, reset: true, created: false, user_id: found.user.id });
+}
+
+function userChangePassword_(body) {
+  var token = String(body.token || "");
+  var cache = CacheService.getScriptCache().get("tok_" + token);
+  if (!cache) return json_({ ok: false, error: "Sesi tidak valid" });
+  var meta = {};
+  try { meta = JSON.parse(cache); } catch (e) { meta = { user_id: cache }; }
+  var userId = String(meta.user_id || body.user_id || "");
+  var oldPw = String(body.old_password || "");
+  var newPw = String(body.new_password || "");
+  if (!newPw || newPw.length < 6) return json_({ ok: false, error: "Password baru minimal 6 karakter" });
+  var sh = ensureTab_("users");
+  var found = findUserRow_(sh, function (u) { return String(u.id) === userId; });
+  if (!found) return json_({ ok: false, error: "User tidak ditemukan" });
+  var expect = found.user.password_hash || hashPw_(DEFAULT_USER_PASSWORD);
+  if (oldPw && hashPw_(oldPw) !== expect) return json_({ ok: false, error: "Password lama salah" });
+  found.user.password_hash = hashPw_(newPw);
+  found.user.must_change_password = false;
+  upsertRow_("users", found.user);
+  return json_({ ok: true });
 }
