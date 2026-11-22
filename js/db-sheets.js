@@ -1070,6 +1070,58 @@
       return SheetsDB.upsertRow("attendance_records", row);
     },
 
+    /** Blob/File → base64 (tanpa prefix data:) */
+    _blobToBase64: function (blob) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          var s = String(reader.result || "");
+          var i = s.indexOf(",");
+          resolve(i >= 0 ? s.slice(i + 1) : s);
+        };
+        reader.onerror = function () {
+          reject(new Error("Gagal baca file"));
+        };
+        reader.readAsDataURL(blob);
+      });
+    },
+
+    /**
+     * Upload media via GAS → Google Drive (mode Sheets; hindari Supabase Storage/quota).
+     */
+    uploadMediaViaGas: async function (blobOrFile, kind) {
+      if (!blobOrFile) throw new Error("Tidak ada file");
+      var max = kind === "image" ? 1.5 * 1024 * 1024 : 2.5 * 1024 * 1024;
+      if (blobOrFile.size > max) {
+        throw new Error(
+          kind === "image"
+            ? "Gambar terlalu besar untuk mode Sheet (maks ~1.5 MB)"
+            : "Pesan suara terlalu besar untuk mode Sheet (maks ~2.5 MB)"
+        );
+      }
+      var type = String(blobOrFile.type || (kind === "image" ? "image/jpeg" : "audio/webm"));
+      var name =
+        (blobOrFile.name && String(blobOrFile.name)) ||
+        (kind === "image" ? "chat-img-" + Date.now() + ".jpg" : "voice-" + Date.now() + ".webm");
+      var b64 = await SheetsDB._blobToBase64(blobOrFile);
+      var data = await gasCall("uploadMedia", {
+        data: b64,
+        mime: type,
+        name: name,
+        kind: kind || "file",
+      });
+      if (!data || !data.url) throw new Error((data && data.error) || "Upload gagal");
+      return data.url;
+    },
+
+    uploadChatAudio: async function (blobOrFile) {
+      return SheetsDB.uploadMediaViaGas(blobOrFile, "audio");
+    },
+
+    uploadChatImage: async function (blobOrFile) {
+      return SheetsDB.uploadMediaViaGas(blobOrFile, "image");
+    },
+
     // no-op realtime
     subscribeChat: function () {
       return { unsubscribe: function () {} };

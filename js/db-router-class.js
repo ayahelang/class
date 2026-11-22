@@ -116,6 +116,9 @@
       "setUserAdmin",
       "adminDeleteUserProfile",
       "deleteUserProfiles",
+      "uploadChatAudio",
+      "uploadChatImage",
+      "uploadMediaViaGas",
       "subscribeChat",
       "subscribeAttendanceLive",
     ];

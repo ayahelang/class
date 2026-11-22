@@ -65,6 +65,7 @@ function doPost(e) {
     if (action === "importBulk") return importBulk_(body);
     if (action === "delete") return delete_(body);
     if (action === "clearChat") return clearChat_(body);
+    if (action === "uploadMedia") return uploadMedia_(body);
     if (action === "ping") return json_({ ok: true, ts: Date.now() });
     return json_({ ok: false, error: "action unknown: " + action });
   } catch (err) {
@@ -598,4 +599,94 @@ function userChangePassword_(body) {
   found.user.must_change_password = false;
   upsertRow_("users", found.user);
   return json_({ ok: true });
+}
+
+/**
+ * Upload media chat (suara/gambar) ke Google Drive — ganti Supabase Storage saat mode Sheets.
+ * body: { data|base64, mime, name, kind }
+ * Returns public-ish direct URL for <audio>/<img>.
+ */
+function getOrCreateMediaFolder_() {
+  var props = props_();
+  var folderId = props.getProperty("CHAT_MEDIA_FOLDER_ID");
+  if (folderId) {
+    try {
+      return DriveApp.getFolderById(folderId);
+    } catch (e) {}
+  }
+  var folders = DriveApp.getFoldersByName("Silverhawk-Class-Chat-Media");
+  var folder;
+  if (folders.hasNext()) {
+    folder = folders.next();
+  } else {
+    folder = DriveApp.createFolder("Silverhawk-Class-Chat-Media");
+  }
+  try {
+    props.setProperty("CHAT_MEDIA_FOLDER_ID", folder.getId());
+  } catch (e2) {}
+  return folder;
+}
+
+function uploadMedia_(body) {
+  body = body || {};
+  var b64 = String(body.data || body.base64 || "");
+  var mime = String(body.mime || body.contentType || "application/octet-stream");
+  var name = String(body.name || ("media-" + Date.now()));
+  var kind = String(body.kind || "file");
+  if (!b64) return json_({ ok: false, error: "data kosong" });
+
+  // data URL → pecah
+  var m = b64.match(/^data:([^;]+);base64,(.+)$/i);
+  if (m) {
+    mime = m[1] || mime;
+    b64 = m[2];
+  }
+  // hilangkan whitespace
+  b64 = b64.replace(/\s+/g, "");
+
+  var bytes;
+  try {
+    bytes = Utilities.base64Decode(b64);
+  } catch (eDec) {
+    return json_({ ok: false, error: "Base64 tidak valid" });
+  }
+  if (!bytes || !bytes.length) return json_({ ok: false, error: "File kosong" });
+  // batas ~2.8 MB (aman untuk Apps Script)
+  if (bytes.length > 2800 * 1024) {
+    return json_({ ok: false, error: "File terlalu besar untuk mode Sheet (maks ~2.5 MB)" });
+  }
+
+  var safeName = name.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 80);
+  if (kind === "audio" && !/\.(webm|ogg|mp3|m4a|wav)$/i.test(safeName)) {
+    if (/ogg/i.test(mime)) safeName += ".ogg";
+    else if (/mp4|m4a|aac/i.test(mime)) safeName += ".m4a";
+    else if (/mpeg|mp3/i.test(mime)) safeName += ".mp3";
+    else safeName += ".webm";
+  }
+  if (kind === "image" && !/\.(jpe?g|png|gif|webp)$/i.test(safeName)) {
+    if (/png/i.test(mime)) safeName += ".png";
+    else if (/webp/i.test(mime)) safeName += ".webp";
+    else if (/gif/i.test(mime)) safeName += ".gif";
+    else safeName += ".jpg";
+  }
+
+  var blob = Utilities.newBlob(bytes, mime, safeName);
+  var folder = getOrCreateMediaFolder_();
+  var file = folder.createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (eShare) {}
+
+  var id = file.getId();
+  // URL yang biasanya bisa diputar di <audio src> / <img src>
+  var direct = "https://drive.google.com/uc?export=download&id=" + id;
+  return json_({
+    ok: true,
+    id: id,
+    url: direct,
+    viewUrl: file.getUrl(),
+    name: safeName,
+    mime: mime,
+    size: bytes.length,
+  });
 }
