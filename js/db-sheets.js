@@ -1147,6 +1147,28 @@
       return SheetsDB.uploadMediaViaGas(blobOrFile, "image");
     },
 
+    /**
+     * Hapus file media di Google Drive saat TTL habis / pesan dihapus.
+     * Aturan TTL tetap di klien: 3h (siswa), 24h (guru), forever (admin).
+     */
+    deleteChatStorageByPublicUrl: async function (publicUrl) {
+      var url = String(publicUrl || "");
+      if (!url || /^data:/i.test(url)) return true;
+      if (!/drive\.google\.com|docs\.google\.com/i.test(url) && !/[?&]id=/.test(url)) {
+        return true;
+      }
+      try {
+        await gasCall("deleteMedia", { url: url });
+      } catch (e) {
+        console.warn("deleteChatStorageByPublicUrl", e);
+      }
+      return true;
+    },
+
+    cleanupExpiredChatMedia: async function () {
+      return gasCall("cleanupExpiredChatMedia", {});
+    },
+
     // no-op realtime
     subscribeChat: function () {
       return { unsubscribe: function () {} };

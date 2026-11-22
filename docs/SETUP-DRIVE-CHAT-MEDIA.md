@@ -48,3 +48,24 @@ Error `DriveApp.getFoldersByName` / `You do not have permission to call DriveApp
 ## Akun Google Workspace (sekolah/kantor)
 
 Admin domain bisa memblokir scope Drive untuk Apps Script. Minta admin mengizinkan, atau pakai akun Gmail pribadi untuk project GAS ini.
+
+## Hapus otomatis file suara di Drive (hemat kuota)
+
+Aturan TTL (sama seperti sebelumnya di chat):
+
+| Pengirim | TTL | File Drive |
+|----------|-----|------------|
+| Siswa | **3 jam** | dihapus setelah 3 jam |
+| Guru / staff | **24 jam** | dihapus setelah 24 jam |
+| Admin | **permanen** | tidak dihapus otomatis |
+
+- **Saat chat terbuka:** klien menandai media kedaluwarsa + memanggil hapus file Drive (ke trash).
+- **Latar belakang** (wajib agar space tetap hemat meski tidak ada yang buka chat):
+
+1. Apps Script → ikon **Triggers** (jam) → **Add Trigger**
+2. Function: **`cleanupExpiredChatMedia_time`**
+3. Event source: **Time-driven**
+4. Type: **Hour timer** → **Every hour**
+5. Save (otorisasi jika diminta)
+
+Fungsi memindai `chat_messages`, menghapus file Drive yang lewat TTL, dan menandai body pesan sebagai `deleted`.

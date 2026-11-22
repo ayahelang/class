@@ -66,6 +66,8 @@ function doPost(e) {
     if (action === "delete") return delete_(body);
     if (action === "clearChat") return clearChat_(body);
     if (action === "uploadMedia") return uploadMedia_(body);
+    if (action === "deleteMedia") return deleteMedia_(body);
+    if (action === "cleanupExpiredChatMedia") return cleanupExpiredChatMedia_(body);
     if (action === "ping") return json_({ ok: true, ts: Date.now() });
     return json_({ ok: false, error: "action unknown: " + action });
   } catch (err) {
@@ -705,5 +707,191 @@ function uploadMedia_(body) {
     name: safeName,
     mime: mime,
     size: bytes.length,
+  });
+}
+
+/** Ambil file ID dari URL Drive / uc?id= */
+function parseDriveId_(url) {
+  var u = String(url || "");
+  if (!u || /^data:/i.test(u)) return "";
+  var m =
+    u.match(/[?&]id=([a-zA-Z0-9_-]{10,})/) ||
+    u.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/) ||
+    u.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  return m ? m[1] : "";
+}
+
+/** Hapus 1 file media di Drive (dipanggil klien saat TTL habis / hapus pesan). */
+function deleteMedia_(body) {
+  body = body || {};
+  var url = String(body.url || body.publicUrl || "");
+  var id = String(body.id || body.fileId || parseDriveId_(url) || "").trim();
+  if (!id) return json_({ ok: true, skipped: true, reason: "not_drive" });
+  try {
+    DriveApp.getFileById(id).setTrashed(true);
+    return json_({ ok: true, deleted: true, id: id });
+  } catch (e) {
+    // sudah terhapus / tidak punya akses
+    return json_({ ok: true, deleted: false, id: id, error: String(e.message || e) });
+  }
+}
+
+function voiceTtlMs_(ttl) {
+  ttl = String(ttl || "3h").toLowerCase();
+  if (ttl === "forever") return Infinity;
+  if (ttl === "24h") return 24 * 3600 * 1000;
+  return 3 * 3600 * 1000;
+}
+
+/**
+ * Scan chat_messages: hapus file Drive untuk suara/gambar yang sudah lewat TTL.
+ * Aturan sama dengan klien:
+ *   - ttl=3h  (siswa) → 3 jam dari created_at
+ *   - ttl=24h (guru)  → 24 jam
+ *   - ttl=forever (admin) → tidak dihapus
+ * holduntil=ISO → perpanjang batas.
+ *
+ * Pasang trigger: Triggers → Add trigger → cleanupExpiredChatMedia_time → Time-driven → Every hour
+ * atau jalankan manual dari editor.
+ */
+function cleanupExpiredChatMedia_time() {
+  return cleanupExpiredChatMedia_({});
+}
+
+function cleanupExpiredChatMedia_(body) {
+  body = body || {};
+  var limit = Math.min(Number(body.limit) || 800, 2000);
+  var sh = ensureTab_("chat_messages");
+  var last = sh.getLastRow();
+  if (last < 2) return json_({ ok: true, scanned: 0, driveDeleted: 0, softExpired: 0 });
+
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var col = {};
+  headers.forEach(function (h, i) {
+    col[String(h || "").toLowerCase()] = i;
+  });
+  var iId = col.id != null ? col.id : 0;
+  var iBody = col.body != null ? col.body : col.message != null ? col.message : -1;
+  var iCreated = col.created_at != null ? col.created_at : col.created != null ? col.created : -1;
+  if (iBody < 0) return json_({ ok: false, error: "kolom body tidak ada di chat_messages" });
+
+  var n = Math.min(last - 1, limit);
+  var values = sh.getRange(2, 1, n, headers.length).getValues();
+  var now = Date.now();
+  var driveDeleted = 0;
+  var softExpired = 0;
+  var scanned = 0;
+
+  function extractMediaMeta(bodyStr) {
+    var out = [];
+    var lines = String(bodyStr || "").split(/\n/);
+    lines.forEach(function (line) {
+      var s = String(line || "").trim();
+      // __voice__|ttl=3h|dur=1|name=x|URL  OR  ...|deleted
+      var vm = s.match(/^__voice__\|ttl=(3h|24h|forever)(?:\|dur=[\d.]*)?(?:\|holduntil=([^|]*))?(?:\|name=[^|]*)?\|(.+)$/i);
+      if (vm) {
+        out.push({ kind: "voice", ttl: vm[1].toLowerCase(), holdUntil: vm[2] || "", tail: vm[3] });
+        return;
+      }
+      // __img__|u=URL|ttl=3h|...
+      if (/^__img__/i.test(s)) {
+        var ttl = "3h";
+        var hold = "";
+        var url = "";
+        var deleted = false;
+        s.split("|").forEach(function (part) {
+          var kv = String(part).split("=");
+          var k = (kv[0] || "").toLowerCase();
+          var v = kv.slice(1).join("=");
+          if (k === "ttl") ttl = v;
+          else if (k === "holduntil") hold = v;
+          else if (k === "u" || k === "url") url = v;
+          else if (k === "deleted") deleted = v === "1" || v === "true";
+        });
+        if (!deleted && url) out.push({ kind: "image", ttl: ttl, holdUntil: hold, tail: url });
+      }
+    });
+    return out;
+  }
+
+  function isExpired(createdMs, ttl, holdUntilStr) {
+    if (String(ttl).toLowerCase() === "forever") return false;
+    var life = voiceTtlMs_(ttl);
+    if (!isFinite(life)) return false;
+    var end = createdMs + life;
+    if (holdUntilStr) {
+      var h = Date.parse(holdUntilStr);
+      if (isFinite(h)) end = Math.max(end, h);
+    }
+    return now >= end;
+  }
+
+  for (var r = 0; r < values.length; r++) {
+    var row = values[r];
+    var bodyStr = iBody >= 0 ? row[iBody] : "";
+    if (!bodyStr) continue;
+    scanned++;
+    var createdMs = now;
+    if (iCreated >= 0 && row[iCreated]) {
+      var c = row[iCreated];
+      createdMs = c instanceof Date ? c.getTime() : Date.parse(String(c)) || now;
+    }
+    var metas = extractMediaMeta(bodyStr);
+    var newBody = String(bodyStr);
+    var rowChanged = false;
+
+    metas.forEach(function (meta) {
+      var tail = String(meta.tail || "");
+      if (!tail || /^deleted$/i.test(tail)) return;
+      if (!isExpired(createdMs, meta.ttl, meta.holdUntil)) return;
+
+      var driveId = parseDriveId_(tail);
+      if (driveId) {
+        try {
+          DriveApp.getFileById(driveId).setTrashed(true);
+          driveDeleted++;
+        } catch (eDel) {}
+      }
+
+      // soft-mark di body agar klien tidak coba putar lagi
+      if (meta.kind === "voice") {
+        // ganti tail URL → deleted (pertahankan prefix)
+        var reV = new RegExp(
+          "(__voice__\\|ttl=" +
+            meta.ttl +
+            "(?:\\|dur=[\\d.]*)?(?:\\|holduntil=[^|]*)?(?:\\|name=[^|]*)?\\|)(" +
+            tail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+            ")",
+          "i"
+        );
+        if (reV.test(newBody)) {
+          newBody = newBody.replace(reV, "$1deleted");
+          rowChanged = true;
+        }
+      } else if (meta.kind === "image" && tail) {
+        if (newBody.indexOf(tail) >= 0) {
+          newBody = newBody.split(tail).join("");
+          // tandai baris img sebagai deleted
+          newBody = newBody.replace(/__img__\|[^|\n]*/gi, function (chunk) {
+            if (/deleted=1/i.test(chunk)) return chunk;
+            return "__img__|deleted=1|reason=expired|ttl=" + (meta.ttl || "3h");
+          });
+          rowChanged = true;
+        }
+      }
+    });
+
+    if (rowChanged) {
+      softExpired++;
+      values[r][iBody] = newBody;
+      sh.getRange(r + 2, iBody + 1).setValue(newBody);
+    }
+  }
+
+  return json_({
+    ok: true,
+    scanned: scanned,
+    driveDeleted: driveDeleted,
+    softExpired: softExpired,
   });
 }

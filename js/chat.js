@@ -1107,6 +1107,17 @@
       const ids = {};
       toDelete.forEach(function (m) {
         ids[m.id] = true;
+        try {
+          const p = parseMessageParts(m.body);
+          if (p.voice && p.voice.url && GalleryDB.deleteChatStorageByPublicUrl) {
+            GalleryDB.deleteChatStorageByPublicUrl(p.voice.url).catch(function () {});
+          }
+          (p.images || []).forEach(function (im) {
+            if (im && im.url && GalleryDB.deleteChatStorageByPublicUrl) {
+              GalleryDB.deleteChatStorageByPublicUrl(im.url).catch(function () {});
+            }
+          });
+        } catch (eDel) {}
         if (m.id && GalleryDB.deleteChat) GalleryDB.deleteChat({ id: m.id }).catch(function () {});
       });
       allMessages = allMessages.filter(function (m) {

@@ -119,6 +119,8 @@
       "uploadChatAudio",
       "uploadChatImage",
       "uploadMediaViaGas",
+      "deleteChatStorageByPublicUrl",
+      "cleanupExpiredChatMedia",
       "subscribeChat",
       "subscribeAttendanceLive",
     ];
