@@ -327,13 +327,27 @@
     var durEl = el.querySelector(".sh-ap-dur");
     if (!audio || !btnPlay) return;
 
-    if (src && (!audio.getAttribute("src") || audio.getAttribute("src") !== src)) {
-      try {
-        audio.setAttribute("src", src);
-        audio.src = src;
-      } catch (e) {}
+    function isDriveLike(u) {
+      u = String(u || "");
+      return /drive\.google\.com|docs\.google\.com/i.test(u) || (/[?&]id=/.test(u) && /google/i.test(u));
     }
-    audio.preload = "auto";
+
+    // Jangan set src Drive langsung — browser: "no supported sources"
+    if (src && !isDriveLike(src)) {
+      if (!audio.getAttribute("src") || audio.getAttribute("src") !== src) {
+        try {
+          audio.setAttribute("src", src);
+          audio.src = src;
+        } catch (e) {}
+      }
+    } else if (isDriveLike(src)) {
+      try {
+        audio.removeAttribute("src");
+        audio.removeAttribute("srcObject");
+        audio.load();
+      } catch (e2) {}
+    }
+    audio.preload = isDriveLike(src) ? "none" : "auto";
     audio.setAttribute("playsinline", "");
     // jangan display:none ketat — beberapa browser susah play
     audio.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;";
@@ -341,6 +355,8 @@
     var known = dur0;
     var hold = false;
     var iv = null;
+    var resolving = false;
+    var resolvedSrc = isDriveLike(src) ? "" : src;
 
     function duration() {
       var d = audio.duration;
@@ -433,56 +449,99 @@
       });
     }
 
-    function doPlay() {
-      if (!audio.getAttribute("src") && src) {
-        audio.src = src;
-      }
-      document.querySelectorAll(".sh-ap audio").forEach(function (a) {
-        if (a !== audio) {
-          try {
-            a.pause();
-          } catch (e) {}
+    function ensurePlayableSrc() {
+      return Promise.resolve().then(function () {
+        if (resolvedSrc) return resolvedSrc;
+        if (!src) throw new Error("Sumber audio kosong");
+        if (!isDriveLike(src)) {
+          resolvedSrc = src;
+          return resolvedSrc;
         }
+        if (resolving) {
+          return new Promise(function (resolve, reject) {
+            var n = 0;
+            var t = setInterval(function () {
+              n++;
+              if (resolvedSrc) {
+                clearInterval(t);
+                resolve(resolvedSrc);
+              } else if (n > 100) {
+                clearInterval(t);
+                reject(new Error("Timeout muat audio"));
+              }
+            }, 100);
+          });
+        }
+        resolving = true;
+        if (btnPlay) {
+          btnPlay.disabled = true;
+          btnPlay.title = "Memuat audio…";
+        }
+        var loader =
+          window.GalleryDB && typeof GalleryDB.getChatMediaBlobUrl === "function"
+            ? GalleryDB.getChatMediaBlobUrl(src)
+            : Promise.reject(new Error("getChatMediaBlobUrl tidak tersedia"));
+        return loader
+          .then(function (blobUrl) {
+            resolvedSrc = blobUrl || src;
+            try {
+              audio.src = resolvedSrc;
+              audio.setAttribute("src", resolvedSrc);
+              audio.load();
+            } catch (e) {}
+            return resolvedSrc;
+          })
+          .finally(function () {
+            resolving = false;
+            if (btnPlay) {
+              btnPlay.disabled = false;
+              btnPlay.title = "Putar";
+            }
+          });
       });
-      var p = audio.play();
-      if (p && p.then) {
-        p.then(function () {
-          paint();
-          tickOn();
-        }).catch(function (err) {
-          console.warn("[SHVoice] play gagal:", err && err.message ? err.message : err);
-          if (btnPlay) btnPlay.title = "Gagal: " + (err && err.message ? err.message : "error");
+    }
+
+    function doPlay() {
+      ensurePlayableSrc()
+        .then(function (playSrc) {
+          if (playSrc && audio.src !== playSrc) {
+            try {
+              audio.src = playSrc;
+              audio.setAttribute("src", playSrc);
+            } catch (e) {}
+          }
+          document.querySelectorAll(".sh-ap audio").forEach(function (a) {
+            if (a !== audio) {
+              try {
+                a.pause();
+              } catch (e) {}
+            }
+          });
+          var p = audio.play();
+          if (p && p.then) {
+            p.then(function () {
+              paint();
+              tickOn();
+            }).catch(function (err) {
+              console.warn("[SHVoice] play gagal:", err && err.message ? err.message : err);
+              if (btnPlay) btnPlay.title = "Gagal: " + (err && err.message ? err.message : "error");
+              paint();
+            });
+          } else {
+            paint();
+            tickOn();
+          }
+        })
+        .catch(function (err) {
+          console.warn("[SHVoice] resolve gagal:", err);
+          if (btnPlay) btnPlay.title = "Gagal muat: " + (err && err.message ? err.message : "error");
           paint();
         });
-      } else {
-        paint();
-        tickOn();
-      }
     }
 
     function toggle() {
       if (audio.paused) {
-        if (audio.readyState < 2) {
-          try {
-            audio.load();
-          } catch (e) {}
-          var done = false;
-          var onReady = function () {
-            if (done) return;
-            done = true;
-            audio.removeEventListener("canplay", onReady);
-            doPlay();
-          };
-          audio.addEventListener("canplay", onReady);
-          setTimeout(function () {
-            if (!done) {
-              done = true;
-              doPlay();
-            }
-          }, 500);
-        } else {
-          doPlay();
-        }
+        doPlay();
       } else {
         audio.pause();
         paint();
@@ -499,18 +558,27 @@
     }
 
     function download() {
-      var u = src || audio.src;
-      if (!u) return;
       var base =
         el.getAttribute("data-name") ||
         (el.closest && el.closest("[data-name]") && el.closest("[data-name]").getAttribute("data-name")) ||
         "pesan-suara";
       base = String(base).replace(/[\\/:*?"<>|]+/g, "-").trim() || "pesan-suara";
-      fetch(u, { mode: "cors" })
-        .then(function (r) {
-          return r.blob();
+      var openUrl = src;
+      ensurePlayableSrc()
+        .then(function (u) {
+          openUrl = u || src;
+          if (!u) return null;
+          if (/^blob:|^data:/i.test(u)) {
+            return fetch(u).then(function (r) {
+              return r.blob();
+            });
+          }
+          return fetch(u, { mode: "cors" }).then(function (r) {
+            return r.blob();
+          });
         })
         .then(function (blob) {
+          if (!blob) return;
           var type = (blob && blob.type) || "";
           var ext = "webm";
           if (/mpeg|mp3/i.test(type)) ext = "mp3";
@@ -519,8 +587,7 @@
           else if (/mp4|m4a/i.test(type)) ext = "m4a";
           else if (/webm/i.test(type)) ext = "webm";
           else {
-            // tebak dari URL
-            var m = String(u).match(/\.([a-z0-9]{2,4})(?:\?|$)/i);
+            var m = String(openUrl || "").match(/\.([a-z0-9]{2,4})(?:\?|$)/i);
             if (m) ext = m[1].toLowerCase();
           }
           var a = document.createElement("a");
@@ -535,7 +602,7 @@
           }, 1000);
         })
         .catch(function () {
-          window.open(u, "_blank", "noopener");
+          if (openUrl) window.open(openUrl, "_blank", "noopener");
         });
     }
 

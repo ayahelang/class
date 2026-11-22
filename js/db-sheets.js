@@ -1165,6 +1165,39 @@
       return true;
     },
 
+    _mediaBlobCache: {},
+
+    /**
+     * URL Drive → blob: yang bisa diputar di <audio>.
+     * (uc?export=download sering memicu "no supported sources")
+     */
+    getChatMediaBlobUrl: async function (publicUrl) {
+      var url = String(publicUrl || "");
+      if (!url) throw new Error("URL kosong");
+      if (/^data:|^blob:/i.test(url)) return url;
+      if (SheetsDB._mediaBlobCache[url]) return SheetsDB._mediaBlobCache[url];
+      if (!/drive\.google\.com|docs\.google\.com/i.test(url) && !/[?&]id=/.test(url)) {
+        return url;
+      }
+      var data = await gasCall("getMedia", { url: url });
+      if (!data || !data.data) throw new Error((data && data.error) || "Gagal unduh media");
+      var bin = atob(String(data.data).replace(/\s+/g, ""));
+      var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      var mime = data.mime || "audio/webm";
+      if (!/^audio\//i.test(mime) && !/^video\//i.test(mime)) {
+        var nm = String(data.name || url);
+        if (/\.webm$/i.test(nm)) mime = "audio/webm";
+        else if (/\.ogg$/i.test(nm)) mime = "audio/ogg";
+        else if (/\.m4a$/i.test(nm)) mime = "audio/mp4";
+        else if (/\.mp3$/i.test(nm)) mime = "audio/mpeg";
+        else mime = "audio/webm";
+      }
+      var blobUrl = URL.createObjectURL(new Blob([arr], { type: mime }));
+      SheetsDB._mediaBlobCache[url] = blobUrl;
+      return blobUrl;
+    },
+
     cleanupExpiredChatMedia: async function () {
       return gasCall("cleanupExpiredChatMedia", {});
     },

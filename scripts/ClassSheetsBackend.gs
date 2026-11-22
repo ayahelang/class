@@ -67,6 +67,7 @@ function doPost(e) {
     if (action === "clearChat") return clearChat_(body);
     if (action === "uploadMedia") return uploadMedia_(body);
     if (action === "deleteMedia") return deleteMedia_(body);
+    if (action === "getMedia") return getMedia_(body);
     if (action === "cleanupExpiredChatMedia") return cleanupExpiredChatMedia_(body);
     if (action === "ping") return json_({ ok: true, ts: Date.now() });
     return json_({ ok: false, error: "action unknown: " + action });
@@ -733,6 +734,36 @@ function deleteMedia_(body) {
   } catch (e) {
     // sudah terhapus / tidak punya akses
     return json_({ ok: true, deleted: false, id: id, error: String(e.message || e) });
+  }
+}
+
+/**
+ * Ambil isi file Drive sebagai base64 agar klien bisa putar lewat blob URL
+ * (URL drive.google.com/uc?... tidak stabil di <audio src>).
+ */
+function getMedia_(body) {
+  body = body || {};
+  var url = String(body.url || body.publicUrl || "");
+  var id = String(body.id || body.fileId || parseDriveId_(url) || "").trim();
+  if (!id) return json_({ ok: false, error: "file id kosong" });
+  try {
+    var file = DriveApp.getFileById(id);
+    var blob = file.getBlob();
+    var bytes = blob.getBytes();
+    if (!bytes || !bytes.length) return json_({ ok: false, error: "file kosong" });
+    if (bytes.length > 3 * 1024 * 1024) {
+      return json_({ ok: false, error: "File terlalu besar untuk streaming lewat GAS (maks ~3 MB)" });
+    }
+    return json_({
+      ok: true,
+      id: id,
+      name: file.getName(),
+      mime: blob.getContentType() || "application/octet-stream",
+      size: bytes.length,
+      data: Utilities.base64Encode(bytes),
+    });
+  } catch (e) {
+    return json_({ ok: false, error: String(e.message || e) });
   }
 }
 

@@ -120,6 +120,7 @@
       "uploadChatImage",
       "uploadMediaViaGas",
       "deleteChatStorageByPublicUrl",
+      "getChatMediaBlobUrl",
       "cleanupExpiredChatMedia",
       "subscribeChat",
       "subscribeAttendanceLive",
