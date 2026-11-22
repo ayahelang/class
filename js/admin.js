@@ -5084,7 +5084,11 @@
           <label class="user-perm-item"><input type="checkbox" data-is-admin ${u.is_admin ? "checked" : ""}> Jadikan admin (penuh)</label>
           <p class="muted" style="font-size:11px;margin:6px 0">Privilege tab admin untuk pengajar:</p>
           <div class="user-perm-grid">${permHtml}</div>
-          <button type="button" class="btn btn-primary" data-save-user="${u.id}" style="margin-top:8px;padding:6px 12px;font-size:12px">Simpan peran &amp; hak akses</button>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center">
+            <button type="button" class="btn btn-primary" data-save-user="${u.id}" style="padding:6px 12px;font-size:12px">Simpan peran &amp; hak akses</button>
+            <button type="button" class="btn btn-ghost" data-reset-pw="${u.id}" data-reset-name="${esc(u.display_name || u.name || u.email || "")}" data-reset-alumni="${esc(u.alumni_id || u.linked_alumni_id || "")}" data-reset-year="${esc(u.linked_angkatan_year || u.angkatan_year || "")}" data-reset-class="${esc(u.linked_class_code || u.class_code || "")}" data-reset-role="${esc(u.role || "student")}" style="padding:6px 12px;font-size:12px" title="Reset password login (mode Sheet)">Reset password</button>
+          </div>
+          <p class="muted" style="font-size:11px;margin:6px 0 0">Reset password untuk akun login password (Sheet). Default baru: <code>Bismillaah</code> — user wajib ganti di login berikutnya.</p>
         </div>
       </div>`;
     }
@@ -5158,6 +5162,52 @@
           await refreshUsers();
         } catch (err) {
           void shAlert(err.message || err);
+        }
+      })
+    );
+    $$("#userList [data-reset-pw]").forEach((btn) =>
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!window.GalleryDB || typeof GalleryDB.adminResetUserPassword !== "function") {
+          void shAlert("Reset password belum tersedia (backend Sheets belum siap).");
+          return;
+        }
+        const id = btn.getAttribute("data-reset-pw");
+        const label = btn.getAttribute("data-reset-name") || id;
+        if (!(await shConfirm("Reset password login untuk:\n" + label + "\n\nPassword akan diganti dan user wajib ganti sandi di login berikutnya."))) {
+          return;
+        }
+        let newPw = await shPrompt("Password baru untuk user (kosong = Bismillaah):", "Bismillaah");
+        if (newPw === null) return;
+        newPw = String(newPw || "").trim() || "Bismillaah";
+        if (newPw.length < 6) {
+          void shAlert("Password minimal 6 karakter.");
+          return;
+        }
+        const adminPw = await shPrompt("Konfirmasi password admin database (ADMIN_PASSWORD):", "");
+        if (adminPw === null) return;
+        if (!String(adminPw || "").trim()) {
+          void shAlert("Password admin wajib diisi.");
+          return;
+        }
+        try {
+          btn.disabled = true;
+          const result = await GalleryDB.adminResetUserPassword({
+            user_id: id,
+            alumni_id: btn.getAttribute("data-reset-alumni") || "",
+            display_name: label,
+            angkatan_year: btn.getAttribute("data-reset-year") || "",
+            class_code: btn.getAttribute("data-reset-class") || "",
+            role: btn.getAttribute("data-reset-role") || "student",
+            admin_password: String(adminPw).trim(),
+            new_password: newPw,
+          });
+          const created = result && result.created ? " (akun login dibuat baru di Sheet)" : "";
+          void shAlert("Password direset." + created + "\nPassword sementara: " + newPw + "\nUser wajib ganti saat login berikutnya.");
+        } catch (err) {
+          void shAlert(err.message || err);
+        } finally {
+          btn.disabled = false;
         }
       })
     );

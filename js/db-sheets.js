@@ -510,18 +510,42 @@
       return SheetsDB.deleteRow("designs", id);
     },
 
-    /** Profil user (login Google / password) di tab Sheet profiles */
+    /** Profil + users login password (Sheet) digabung agar Roles menampilkan semua akun */
     listRegisteredUsers: async function () {
-      var rows = [];
+      var profiles = [];
+      var users = [];
       try {
-        rows = (await SheetsDB.listRows("profiles", { limit: 5000 })) || [];
+        profiles = (await SheetsDB.listRows("profiles", { limit: 5000 })) || [];
       } catch (e) {}
-      if (!rows.length) {
-        try {
-          rows = (await SheetsDB.listRows("users", { limit: 5000 })) || [];
-        } catch (e2) {}
-      }
-      return rows;
+      try {
+        users = (await SheetsDB.listRows("users", { limit: 5000 })) || [];
+      } catch (e2) {}
+      var byId = {};
+      (profiles || []).forEach(function (p) {
+        if (!p || p.id == null) return;
+        byId[String(p.id)] = Object.assign({}, p);
+      });
+      (users || []).forEach(function (u) {
+        if (!u || u.id == null) return;
+        var id = String(u.id);
+        var prev = byId[id] || {};
+        byId[id] = Object.assign({}, prev, u, {
+          id: id,
+          display_name: u.display_name || u.name || prev.display_name || prev.name || "",
+          email: u.email || prev.email || "",
+          linked_student_name: prev.linked_student_name || u.linked_student_name || u.name || "",
+          linked_angkatan_year: prev.linked_angkatan_year || u.angkatan_year || null,
+          linked_class_code: prev.linked_class_code || u.class_code || "",
+          linked_alumni_id: prev.linked_alumni_id || u.alumni_id || null,
+          alumni_id: u.alumni_id || prev.alumni_id || prev.linked_alumni_id || null,
+          role: u.role || prev.role || "student",
+          must_change_password: u.must_change_password != null ? u.must_change_password : prev.must_change_password,
+          is_admin: prev.is_admin || u.role === "admin",
+        });
+      });
+      return Object.keys(byId).map(function (k) {
+        return byId[k];
+      });
     },
     adminListLinks: async function () {
       var rows = await SheetsDB.listRegisteredUsers();
