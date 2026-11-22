@@ -359,13 +359,127 @@
     },
 
     adminListAlumni: async function () {
-      return SheetsDB.listRows("alumni", { limit: 2000 });
+      var angkatan = [];
+      try {
+        angkatan = (await SheetsDB.listRows("angkatan", { limit: 200 })) || [];
+      } catch (eA) {}
+      var byId = {};
+      (angkatan || []).forEach(function (a) {
+        if (a && a.id) byId[String(a.id)] = a;
+      });
+      var rows = (await SheetsDB.listRows("alumni", { limit: 5000 })) || [];
+      return rows.map(function (al) {
+        var ang = byId[String(al.angkatan_id || "")] || {};
+        var label = ang.label || al.angkatan_label || "";
+        if (!label && (al.angkatan_year || al.year)) label = "Angkatan " + (al.angkatan_year || al.year);
+        return Object.assign({}, al, {
+          gallery_angkatan: { id: ang.id || al.angkatan_id || null, label: label, label_norm: ang.label_norm || "" },
+        });
+      });
     },
     listAngkatan: async function () {
-      return SheetsDB.listRows("angkatan", { limit: 100 });
+      return SheetsDB.listRows("angkatan", { limit: 200 });
+    },
+    adminListAngkatanAll: async function () {
+      return SheetsDB.listRows("angkatan", { limit: 200 });
+    },
+    adminUpsertAngkatan: async function (opts) {
+      opts = opts || {};
+      var label = String(opts.label || "").trim();
+      if (!label) throw new Error("Label angkatan wajib");
+      var ln = label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      var row = {
+        id: opts.id || "ang-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+        label: label,
+        label_norm: ln,
+        source: opts.source || "admin",
+      };
+      if (opts.id) row.id = opts.id;
+      return SheetsDB.upsertRow("angkatan", row);
+    },
+    adminDeleteAngkatan: async function (id) {
+      return SheetsDB.deleteRow("angkatan", id);
+    },
+    adminUpsertAlumni: async function (opts) {
+      opts = opts || {};
+      var nm = String(opts.name || "").trim();
+      if (nm.length < 2) throw new Error("Nama terlalu pendek");
+      var row = {
+        id: opts.id || "al-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+        name: nm,
+        name_norm: nm.toLowerCase().replace(/\s+/g, " "),
+        class_code: String(opts.classCode || opts.class_code || "").trim() || null,
+        angkatan_id: opts.angkatanId || opts.angkatan_id || null,
+        role: String(opts.role || "Santriwati").trim() || "Santriwati",
+      };
+      if (opts.id) row.id = opts.id;
+      return SheetsDB.upsertRow("alumni", row);
+    },
+    adminDeleteAlumni: async function (id) {
+      return SheetsDB.deleteRow("alumni", id);
     },
     adminListWebsites: async function () {
-      return SheetsDB.listRows("websites", { limit: 500 });
+      var alumni = [];
+      var angkatan = [];
+      try {
+        alumni = (await SheetsDB.listRows("alumni", { limit: 5000 })) || [];
+      } catch (e1) {}
+      try {
+        angkatan = (await SheetsDB.listRows("angkatan", { limit: 200 })) || [];
+      } catch (e2) {}
+      var angById = {};
+      (angkatan || []).forEach(function (a) {
+        if (a && a.id) angById[String(a.id)] = a;
+      });
+      var alById = {};
+      (alumni || []).forEach(function (al) {
+        if (!al || !al.id) return;
+        var ang = angById[String(al.angkatan_id || "")] || {};
+        alById[String(al.id)] = Object.assign({}, al, {
+          gallery_angkatan: {
+            id: ang.id || al.angkatan_id || null,
+            label: ang.label || (al.angkatan_year ? "Angkatan " + al.angkatan_year : "") || "",
+          },
+        });
+      });
+      var rows = (await SheetsDB.listRows("websites", { limit: 5000 })) || [];
+      return rows.map(function (w) {
+        var al = alById[String(w.alumni_id || w.owner_alumni_id || "")] || null;
+        return Object.assign({}, w, {
+          gallery_alumni: al
+            ? {
+                id: al.id,
+                name: al.name,
+                class_code: al.class_code,
+                angkatan_id: al.angkatan_id,
+                gallery_angkatan: al.gallery_angkatan || {},
+              }
+            : null,
+        });
+      });
+    },
+    adminUpsertWebsite: async function (opts) {
+      opts = opts || {};
+      var t = String(opts.title || "").trim() || "Website";
+      var u = String(opts.url || "").trim();
+      if (!/^https?:\/\//i.test(u)) throw new Error("URL harus http(s)");
+      var alumniId = opts.alumniId || opts.alumni_id || null;
+      if (!opts.id && !alumniId) throw new Error("Pilih alumni pemilik website");
+      var row = {
+        id: opts.id || "web-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+        title: t,
+        url: u,
+        category: String(opts.category || "Web Kreatif").trim() || "Web Kreatif",
+        alumni_id: alumniId,
+      };
+      if (opts.id) row.id = opts.id;
+      return SheetsDB.upsertRow("websites", row);
+    },
+    adminDeleteWebsite: async function (id) {
+      return SheetsDB.deleteRow("websites", id);
     },
     listVideosAdmin: async function () {
       return SheetsDB.listRows("videos", { limit: 500 });
@@ -379,8 +493,131 @@
     listDesignsPublic: async function () {
       var rows = await SheetsDB.listRows("designs", { limit: 2000 });
       return (rows || []).filter(function (r) {
-        return r.active !== false;
+        return r.active !== false && r.active !== "false";
       });
+    },
+    adminListDesigns: async function () {
+      return SheetsDB.listRows("designs", { limit: 2000 });
+    },
+    upsertDesign: async function (payload) {
+      payload = payload || {};
+      if (!payload.id) payload.id = "dg-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+      payload.updated_at = new Date().toISOString();
+      if (!payload.created_at) payload.created_at = payload.updated_at;
+      return SheetsDB.upsertRow("designs", payload);
+    },
+    deleteDesign: async function (id) {
+      return SheetsDB.deleteRow("designs", id);
+    },
+
+    /** Profil user (login Google / password) di tab Sheet profiles */
+    listRegisteredUsers: async function () {
+      var rows = [];
+      try {
+        rows = (await SheetsDB.listRows("profiles", { limit: 5000 })) || [];
+      } catch (e) {}
+      if (!rows.length) {
+        try {
+          rows = (await SheetsDB.listRows("users", { limit: 5000 })) || [];
+        } catch (e2) {}
+      }
+      return rows;
+    },
+    adminListLinks: async function () {
+      var rows = await SheetsDB.listRegisteredUsers();
+      return (rows || []).filter(function (r) {
+        return !!(r.linked_student_name && String(r.linked_student_name).trim());
+      });
+    },
+    adminForceLinkProfile: async function (userId, opts) {
+      opts = opts || {};
+      var name = String(opts.studentName || opts.linked_student_name || "").trim();
+      var year = parseInt(opts.angkatanYear || opts.linked_angkatan_year, 10) || null;
+      var kelas = String(opts.classCode || opts.linked_class_code || "").trim();
+      if (!userId || !name || !year) throw new Error("Lengkapi user, nama, dan angkatan.");
+      var all = await SheetsDB.listRegisteredUsers();
+      var target = (all || []).find(function (p) {
+        return String(p.id) === String(userId);
+      });
+      if (!target) {
+        target = { id: userId };
+      }
+      var norm = function (s) {
+        return String(s || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+      };
+      for (var i = 0; i < (all || []).length; i++) {
+        var o = all[i];
+        if (String(o.id) === String(userId)) continue;
+        if (String(o.linked_angkatan_year) === String(year) && norm(o.linked_student_name) === norm(name)) {
+          await SheetsDB.upsertRow("profiles", Object.assign({}, o, {
+            linked_student_name: "",
+            linked_angkatan_year: null,
+            linked_class_code: "",
+            linked_alumni_id: null,
+            updated_at: new Date().toISOString(),
+          }));
+        }
+      }
+      var row = Object.assign({}, target, {
+        id: userId,
+        linked_student_name: name,
+        linked_angkatan_year: year,
+        linked_class_code: kelas,
+        updated_at: new Date().toISOString(),
+      });
+      return SheetsDB.upsertRow("profiles", row);
+    },
+    adminUnlinkProfile: async function (userId) {
+      var all = await SheetsDB.listRegisteredUsers();
+      var target = (all || []).find(function (p) {
+        return String(p.id) === String(userId);
+      });
+      if (!target) throw new Error("User tidak ditemukan");
+      var row = Object.assign({}, target, {
+        linked_student_name: "",
+        linked_angkatan_year: null,
+        linked_class_code: "",
+        linked_alumni_id: null,
+        link_allow_user_ids: [],
+        updated_at: new Date().toISOString(),
+      });
+      return SheetsDB.upsertRow("profiles", row);
+    },
+    setUserAdmin: async function (userId, opts) {
+      opts = opts || {};
+      var all = await SheetsDB.listRegisteredUsers();
+      var target = (all || []).find(function (p) {
+        return String(p.id) === String(userId);
+      });
+      if (!target) throw new Error("User tidak ditemukan");
+      var row = Object.assign({}, target, {
+        is_admin: !!opts.isAdmin,
+        permissions: opts.permissions || {},
+        role: opts.role !== undefined ? opts.role || "" : target.role || "",
+        updated_at: new Date().toISOString(),
+      });
+      return SheetsDB.upsertRow("profiles", row);
+    },
+    adminDeleteUserProfile: async function (userId) {
+      var all = await SheetsDB.listRegisteredUsers();
+      var target = (all || []).find(function (p) {
+        return String(p.id) === String(userId);
+      });
+      if (!target) throw new Error("User tidak ditemukan");
+      if (target.is_admin === true || target.is_admin === "true") throw new Error("Tidak dapat menghapus user admin");
+      return SheetsDB.deleteRow("profiles", userId);
+    },
+    deleteUserProfiles: async function (ids) {
+      ids = ids || [];
+      for (var i = 0; i < ids.length; i++) {
+        try {
+          await SheetsDB.adminDeleteUserProfile(ids[i]);
+        } catch (e) {}
+      }
+      return true;
     },
 
     /** Bangun struktur gallery dari tab Sheet (alumni + websites) */
