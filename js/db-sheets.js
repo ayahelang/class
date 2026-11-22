@@ -237,10 +237,13 @@
 
     // ---- generic table helpers ----
     listRows: async function (table, opts) {
-      var data = await gasCall("list", {
+      var payload = {
         table: table,
         limit: (opts && opts.limit) || 500,
-      });
+      };
+      // chat: minta baris terbaru dari GAS
+      if (table === "chat_messages") payload.newest = true;
+      var data = await gasCall("list", payload);
       var rows = (data && data.rows) || [];
       return rows.map(function (obj) {
         if (!obj || typeof obj !== "object") return obj;
@@ -319,22 +322,84 @@
     deleteChatRoom: async function (id) {
       return SheetsDB.deleteRow("chat_rooms", id);
     },
-    listChatMessages: async function (roomId, limit) {
-      var rows = await SheetsDB.listRows("chat_messages", { limit: limit || 200 });
-      if (roomId) {
+    listChatMessages: async function (roomId, limit, angkatanId) {
+      // Ambil lebih banyak lalu filter — GAS list chat_messages pakai newest-first
+      var rows = await SheetsDB.listRows("chat_messages", { limit: Math.max(limit || 200, 500) });
+      rows = rows || [];
+      var rid = roomId != null && roomId !== "" ? String(roomId) : "";
+      var aid = angkatanId != null && angkatanId !== "" ? String(angkatanId) : "";
+      if (rid) {
         rows = rows.filter(function (r) {
-          return String(r.room_id) === String(roomId);
+          return String(r.room_id || "") === rid;
+        });
+      } else if (aid) {
+        rows = rows.filter(function (r) {
+          // ruang angkatan: cocok angkatan_id dan tanpa room_id custom
+          return String(r.angkatan_id || "") === aid && !r.room_id;
         });
       }
       rows.sort(function (a, b) {
-        return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+        var ta = Date.parse(a.created_at || "") || 0;
+        var tb = Date.parse(b.created_at || "") || 0;
+        return ta - tb;
       });
+      if (limit && rows.length > limit) {
+        rows = rows.slice(rows.length - limit);
+      }
       return rows;
     },
     insertChatMessage: async function (payload) {
+      payload = payload || {};
       payload.created_at = payload.created_at || new Date().toISOString();
+      payload.updated_at = payload.updated_at || payload.created_at;
       if (!payload.id) payload.id = "m-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
-      return SheetsDB.upsertRow("chat_messages", payload);
+      // normalisasi id ruang / angkatan sebagai string (hindari null vs "null")
+      if (payload.room_id == null || payload.room_id === "" || payload.room_id === "null") {
+        payload.room_id = "";
+      } else {
+        payload.room_id = String(payload.room_id);
+      }
+      if (payload.angkatan_id == null || payload.angkatan_id === "" || payload.angkatan_id === "null") {
+        payload.angkatan_id = "";
+      } else {
+        payload.angkatan_id = String(payload.angkatan_id);
+      }
+      var saved = await SheetsDB.upsertRow("chat_messages", payload);
+      // pastikan bentuk return selalu punya id + body untuk addMsg di chat.js
+      if (!saved || typeof saved !== "object") saved = payload;
+      if (!saved.id) saved.id = payload.id;
+      if (saved.body == null) saved.body = payload.body || "";
+      if (!saved.author_name) saved.author_name = payload.author_name || "Anonim";
+      if (!saved.created_at) saved.created_at = payload.created_at;
+      return saved;
+    },
+
+    /** Alias yang dipakai chat.js lewat router */
+    listChat: async function (opts) {
+      opts = opts || {};
+      return SheetsDB.listChatMessages(opts.roomId || opts.room_id || null, opts.limit || 200, opts.angkatanId || opts.angkatan_id || null);
+    },
+    sendChat: async function (opts) {
+      opts = opts || {};
+      var row = {
+        room_id: opts.roomId || opts.room_id || "",
+        angkatan_id: opts.angkatanId || opts.angkatan_id || "",
+        author_name: opts.authorName || opts.author_name || "Anonim",
+        body: opts.body || "",
+        avatar_emoji: opts.avatarEmoji || opts.avatar_emoji || "💬",
+        reply_to: opts.replyTo || opts.reply_to || null,
+        user_id: opts.userId || opts.user_id || null,
+        is_registered: !!opts.is_registered,
+        created_at: new Date().toISOString(),
+      };
+      try {
+        var sess = await SheetsDB.getSession();
+        if (sess && sess.user) {
+          row.user_id = row.user_id || sess.user.id || null;
+          if (sess.user.email) row.author_email = sess.user.email;
+        }
+      } catch (eS) {}
+      return SheetsDB.insertChatMessage(row);
     },
     clearChatMessages: async function (roomId) {
       await gasCall("clearChat", { room_id: roomId });

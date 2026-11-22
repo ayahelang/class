@@ -80,6 +80,8 @@
       "deleteChatRoom",
       "listChatMessages",
       "insertChatMessage",
+      "listChat",
+      "sendChat",
       "clearChatMessages",
       "verifyChatRoomAccess",
       "adminListAlumni",
@@ -149,11 +151,16 @@
       }
     });
 
-    // chat.js memakai listChat / sendChat (bukan listChatMessages / insertChatMessage)
+    // chat.js memakai listChat / sendChat
     G.listChat = function (opts) {
       opts = opts || {};
-      if (useSheets() && S.listChatMessages) {
-        return S.listChatMessages(opts.roomId || null, opts.limit || 200).then(function (rows) {
+      if (useSheets()) {
+        var loader = S.listChat
+          ? S.listChat(opts)
+          : S.listChatMessages
+            ? S.listChatMessages(opts.roomId || null, opts.limit || 200, opts.angkatanId || null)
+            : Promise.resolve([]);
+        return loader.then(function (rows) {
           return (rows || []).map(function (r) {
             return {
               id: r.id,
@@ -179,19 +186,22 @@
 
     G.sendChat = function (opts) {
       opts = opts || {};
-      if (useSheets() && S.insertChatMessage) {
-        var row = {
-          room_id: opts.roomId || null,
-          angkatan_id: opts.angkatanId || null,
-          author_name: opts.authorName || "Anonim",
-          body: opts.body || "",
-          avatar_emoji: opts.avatarEmoji || "💬",
-          reply_to: opts.replyTo || null,
-          user_id: null,
-          is_registered: false,
-          created_at: new Date().toISOString(),
-        };
-        return S.insertChatMessage(row);
+      if (useSheets()) {
+        if (typeof S.sendChat === "function") return S.sendChat(opts);
+        if (typeof S.insertChatMessage === "function") {
+          return S.insertChatMessage({
+            room_id: opts.roomId || "",
+            angkatan_id: opts.angkatanId || "",
+            author_name: opts.authorName || "Anonim",
+            body: opts.body || "",
+            avatar_emoji: opts.avatarEmoji || "💬",
+            reply_to: opts.replyTo || null,
+            user_id: null,
+            is_registered: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+        return Promise.reject(new Error("sendChat (Sheets) tidak tersedia"));
       }
       if (typeof SB.sendChat === "function") return SB.sendChat(opts);
       return Promise.reject(new Error("sendChat tidak tersedia"));

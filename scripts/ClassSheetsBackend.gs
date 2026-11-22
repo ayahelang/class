@@ -132,28 +132,52 @@ function list_(body) {
   var last = sh.getLastRow();
   if (last < 2) return json_({ ok: true, rows: [] });
   var values = sh.getRange(1, 1, last, 3).getValues();
-  var rows = [];
   var limit = Number(body.limit) || 500;
-  for (var i = 1; i < values.length && rows.length < limit; i++) {
-    var id = values[i][0];
-    var js = values[i][1];
-    if (!id) continue;
-    var obj = {};
-    try {
-      obj = JSON.parse(js);
-    } catch (e) {
-      obj = { id: id, raw: String(js) };
+  if (limit < 1) limit = 500;
+  // chat_messages: ambil dari BAWAH (terbaru) agar tidak "hilang" saat refresh
+  var newestFirst = table === "chat_messages" || body.newest === true || body.newest === "1";
+  var collected = [];
+  if (newestFirst) {
+    for (var i = values.length - 1; i >= 1 && collected.length < limit; i--) {
+      var idN = values[i][0];
+      var jsN = values[i][1];
+      if (!idN) continue;
+      var objN = {};
+      try {
+        objN = JSON.parse(jsN);
+      } catch (eN) {
+        objN = { id: idN, raw: String(jsN) };
+      }
+      if (objN && objN.row_json && typeof objN.row_json === "object") {
+        var innerN = objN.row_json;
+        if (!innerN.id) innerN.id = objN.id || idN;
+        objN = innerN;
+      }
+      objN.id = objN.id || idN;
+      collected.push(objN);
     }
-    // Normalisasi sisa export migrasi { row_json: {...} }
-    if (obj && obj.row_json && typeof obj.row_json === "object") {
-      var inner = obj.row_json;
-      if (!inner.id) inner.id = obj.id || id;
-      obj = inner;
+    collected.reverse();
+  } else {
+    for (var j = 1; j < values.length && collected.length < limit; j++) {
+      var id = values[j][0];
+      var js = values[j][1];
+      if (!id) continue;
+      var obj = {};
+      try {
+        obj = JSON.parse(js);
+      } catch (e) {
+        obj = { id: id, raw: String(js) };
+      }
+      if (obj && obj.row_json && typeof obj.row_json === "object") {
+        var inner = obj.row_json;
+        if (!inner.id) inner.id = obj.id || id;
+        obj = inner;
+      }
+      obj.id = obj.id || id;
+      collected.push(obj);
     }
-    obj.id = obj.id || id;
-    rows.push(obj);
   }
-  return json_({ ok: true, rows: rows });
+  return json_({ ok: true, rows: collected });
 }
 
 function findRowById_(sh, id) {
