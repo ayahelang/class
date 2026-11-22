@@ -225,10 +225,18 @@
     listRows: async function (table, opts) {
       var data = await gasCall("list", {
         table: table,
-        filter: (opts && opts.filter) || null,
         limit: (opts && opts.limit) || 500,
       });
-      return data.rows || [];
+      var rows = (data && data.rows) || [];
+      return rows.map(function (obj) {
+        if (!obj || typeof obj !== "object") return obj;
+        if (obj.row_json && typeof obj.row_json === "object") {
+          var inner = obj.row_json;
+          if (!inner.id) inner.id = obj.id;
+          obj = inner;
+        }
+        return obj;
+      });
     },
 
     upsertRow: async function (table, row) {

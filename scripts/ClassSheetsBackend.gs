@@ -140,6 +140,12 @@ function list_(body) {
     } catch (e) {
       obj = { id: id, raw: String(js) };
     }
+    // Normalisasi sisa export migrasi { row_json: {...} }
+    if (obj && obj.row_json && typeof obj.row_json === "object") {
+      var inner = obj.row_json;
+      if (!inner.id) inner.id = obj.id || id;
+      obj = inner;
+    }
     obj.id = obj.id || id;
     rows.push(obj);
   }

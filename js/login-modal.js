@@ -6,6 +6,17 @@
   var directory = null;
   var modal = null;
 
+  function normalizeRow(obj) {
+    if (!obj || typeof obj !== "object") return obj;
+    if (obj.row_json && typeof obj.row_json === "object") {
+      var inner = obj.row_json;
+      if (!inner.id) inner.id = obj.id;
+      return inner;
+    }
+    return obj;
+  }
+
+
   function ensureModal() {
     if (modal) return modal;
     modal = document.createElement("div");
@@ -60,6 +71,8 @@
   }
 
   function yearOfAlumni(a, angList) {
+    a = normalizeRow(a) || {};
+    angList = (angList || []).map(normalizeRow);
     if (a.angkatan_year) return String(a.angkatan_year);
     if (a.year) return String(a.year);
     var id = String(a.angkatan_id || "");
@@ -121,6 +134,8 @@
       try {
         var d = await GalleryDB.listLoginDirectory();
         if (d && ((d.alumni && d.alumni.length) || (d.angkatan && d.angkatan.length))) {
+          d.angkatan = (d.angkatan || []).map(normalizeRow);
+          d.alumni = (d.alumni || []).map(normalizeRow);
           directory = d;
           return directory;
         }
@@ -132,6 +147,10 @@
     // 2) list tab angkatan + alumni (kompatibel GAS lama)
     try {
       directory = await loadFromListRows();
+      if (directory) {
+        directory.angkatan = (directory.angkatan || []).map(normalizeRow);
+        directory.alumni = (directory.alumni || []).map(normalizeRow);
+      }
       if ((directory.alumni && directory.alumni.length) || (directory.angkatan && directory.angkatan.length)) {
         return directory;
       }
@@ -153,7 +172,8 @@
       sel.innerHTML = '<option value="">— pilih angkatan —</option>';
       var years = {};
       (dir.angkatan || []).forEach(function (a) {
-        var y = a.year || (String(a.label || "").match(/20\d{2}/) || [])[0] || "";
+        a = normalizeRow(a) || {};
+        var y = a.year || (String(a.label || a.name || "").match(/20\d{2}/) || [])[0] || "";
         if (y) years[String(y)] = true;
       });
       (dir.alumni || []).forEach(function (a) {
