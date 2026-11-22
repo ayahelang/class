@@ -164,20 +164,41 @@
       if (typeof SB.toggleChatReaction === "function") return SB.toggleChatReaction.apply(null, arguments);
       return Promise.resolve({});
     };
-    G.updateChat = function (opts) {
+    G.updateChat = async function (opts) {
+      opts = opts || {};
       if (useSheets() && S.upsertRow) {
-        return S.upsertRow("chat_messages", {
+        var prev = {};
+        try {
+          if (S.listChatMessages) {
+            var all = await S.listChatMessages(null, 500);
+            prev = (all || []).find(function (x) { return String(x.id) === String(opts.id); }) || {};
+          }
+        } catch (eP) {}
+        var merged = Object.assign({}, prev, {
           id: opts.id,
-          body: opts.body,
+          body: opts.body != null ? opts.body : prev.body,
           updated_at: new Date().toISOString(),
         });
+        return S.upsertRow("chat_messages", merged);
       }
       if (typeof SB.updateChat === "function") return SB.updateChat(opts);
       return Promise.resolve(null);
     };
-    G.deleteChat = function (id) {
+    G.deleteChat = function (arg) {
+      // chat.js memanggil deleteChat({ id }) — bukan string id saja
+      var id = arg;
+      if (arg && typeof arg === "object") id = arg.id || arg.messageId || null;
+      id = id != null ? String(id) : "";
+      if (!id) return Promise.resolve(null);
       if (useSheets() && S.deleteRow) return S.deleteRow("chat_messages", id);
-      if (typeof SB.deleteChat === "function") return SB.deleteChat(id);
+      if (typeof SB.deleteChat === "function") {
+        // supabase db.js biasanya juga terima id string ATAU object
+        try {
+          return SB.deleteChat(arg);
+        } catch (e0) {
+          return SB.deleteChat(id);
+        }
+      }
       return Promise.resolve(null);
     };
 

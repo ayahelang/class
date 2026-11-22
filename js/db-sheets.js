@@ -229,7 +229,11 @@
     },
 
     deleteRow: async function (table, id) {
-      await gasCall("delete", { table: table, id: id });
+      var rid = id;
+      if (id && typeof id === "object") rid = id.id || id;
+      rid = rid != null ? String(rid) : "";
+      if (!rid) throw new Error("deleteRow: id kosong");
+      await gasCall("delete", { table: table, id: rid });
       return true;
     },
 
@@ -305,6 +309,10 @@
     clearChatMessages: async function (roomId) {
       await gasCall("clearChat", { room_id: roomId });
       return true;
+    },
+    deleteChat: async function (arg) {
+      var id = arg && typeof arg === "object" ? arg.id : arg;
+      return SheetsDB.deleteRow("chat_messages", id);
     },
     verifyChatRoomAccess: async function (opts) {
       opts = opts || {};

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Migrasi data → Database Class (Sheet)</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="../data/db-backend-config.js"></script>
+</head>
+<body class="page-skills" style="padding:24px;max-width:720px;margin:auto">
+  <h1>Migrasi data Supabase → Sheet</h1>
+  <p class="muted">Tempel JSON <b>array of objects</b> (setiap objek wajib punya <code>id</code>). Password = Script Property <code>ADMIN_PASSWORD</code>.</p>
+
+  <label class="field"><span>Password admin</span>
+    <input type="password" id="pw" autocomplete="current-password" style="width:100%">
+  </label>
+
+  <label class="field"><span>Tabel (tab Sheet)</span>
+    <select id="table" style="width:100%">
+      <option value="angkatan">angkatan</option>
+      <option value="alumni">alumni</option>
+      <option value="websites">websites</option>
+      <option value="videos">videos</option>
+      <option value="announcements">announcements</option>
+      <option value="attendance_sessions">attendance_sessions</option>
+      <option value="attendance_records">attendance_records</option>
+      <option value="chat_rooms">chat_rooms</option>
+      <option value="chat_messages">chat_messages</option>
+      <option value="profiles">profiles</option>
+      <option value="_meta">_meta</option>
+    </select>
+  </label>
+
+  <label class="field"><span>JSON array</span>
+    <textarea id="json" rows="16" style="width:100%;font-family:monospace;font-size:12px" placeholder='[ { "id": "...", ... }, ... ]'></textarea>
+  </label>
+
+  <p style="margin-top:12px">
+    <button type="button" class="btn btn-primary" id="go">Import bulk</button>
+  </p>
+  <p id="msg" class="muted" style="white-space:pre-wrap"></p>
+  <p class="muted" style="font-size:13px">Panduan lengkap: <code>docs/MIGRATE-ALL-SUPABASE-TO-SHEETS.md</code></p>
+
+  <script>
+  document.getElementById("go").onclick = async function () {
+    var msg = document.getElementById("msg");
+    msg.textContent = "Memproses…";
+    try {
+      var cfg = window.SH_DB_BACKEND_CONFIG || {};
+      var url = String(cfg.gasUrl || "").trim();
+      if (!url) throw new Error("gasUrl kosong di db-backend-config.js");
+      var rows = JSON.parse(document.getElementById("json").value.trim());
+      if (!Array.isArray(rows)) throw new Error("JSON harus array");
+      var res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "importBulk",
+          table: document.getElementById("table").value,
+          rows: rows,
+          password: document.getElementById("pw").value,
+        }),
+      });
+      var data = await res.json();
+      if (!data || !data.ok) throw new Error((data && data.error) || "Gagal");
+      msg.textContent = "Selesai: " + (data.imported || rows.length) + " baris → " + document.getElementById("table").value;
+    } catch (e) {
+      msg.textContent = e.message || String(e);
+    }
+  };
+  </script>
+</body>
+</html>
