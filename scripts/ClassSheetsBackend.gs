@@ -1,17 +1,16 @@
 /**
- * Silverhawk Class — database primer via Google Sheet
+ * Silverhawk Class — database primer via Google Sheet (FIX setValues / merge)
  *
  * SETUP:
- * 1. Buat Spreadsheet baru, catat ID-nya.
- * 2. script.google.com → project baru → tempel file ini.
+ * 1. Spreadsheet baru → catat ID
+ * 2. script.google.com → tempel SELURUH file ini (ganti Code.gs lama)
  * 3. Script Properties:
- *      SPREADSHEET_ID = <id sheet>
- *      ADMIN_PASSWORD = <password admin class>
- *      ADMIN_LABEL = Admin Class (opsional)
- * 4. Deploy Web App: Execute as Me, Anyone
- * 5. Salin URL ke data/db-backend-config.js → gasUrl
+ *      SPREADSHEET_ID, ADMIN_PASSWORD, (opsional) ADMIN_LABEL
+ * 4. Deploy → Web app → Execute as Me, Anyone
+ * 5. gasUrl di data/db-backend-config.js
  *
- * Sheet tabs: id | json | updated_at (dibuat otomatis)
+ * Setelah update: Deploy lagi (New version).
+ * Buka Sheet tab chat_rooms / chat_messages → Format → Merge cells → Unmerge jika ada.
  */
 
 var TABS = [
@@ -65,22 +64,26 @@ function ss_() {
   return SpreadsheetApp.openById(id);
 }
 
-/** Pastikan tab format: A=id, B=json, C=updated_at (tanpa merge) */
 function ensureTab_(name) {
   var ss = ss_();
   var sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, 3).setValues([["id", "json", "updated_at"]]);
+    sh.getRange(1, 1).setValue("id");
+    sh.getRange(1, 2).setValue("json");
+    sh.getRange(1, 3).setValue("updated_at");
     return sh;
   }
-  // Perbaiki header bila kosong / beda
   try {
-    sh.getRange(1, 1, 1, 3).breakApart();
+    var maxR = Math.max(sh.getMaxRows(), 2);
+    var maxC = Math.max(sh.getMaxColumns(), 3);
+    sh.getRange(1, 1, maxR, maxC).breakApart();
   } catch (e0) {}
   var h1 = String(sh.getRange(1, 1).getValue() || "");
   if (!h1 || h1.toLowerCase() !== "id") {
-    sh.getRange(1, 1, 1, 3).setValues([["id", "json", "updated_at"]]);
+    sh.getRange(1, 1).setValue("id");
+    sh.getRange(1, 2).setValue("json");
+    sh.getRange(1, 3).setValue("updated_at");
   }
   return sh;
 }
@@ -117,7 +120,7 @@ function list_(body) {
     try {
       obj = JSON.parse(js);
     } catch (e) {
-      obj = { id: id, raw: js };
+      obj = { id: id, raw: String(js) };
     }
     obj.id = obj.id || id;
     rows.push(obj);
@@ -135,14 +138,19 @@ function findRowById_(sh, id) {
   return -1;
 }
 
+/** Tulis 1 baris — SEL PER SEL (hindari error setValues vs merge) */
 function writeLine_(sh, sheetRow, line) {
-  // Selalu tulis tepat 1 baris x 3 kolom
-  sh.getRange(sheetRow, 1, sheetRow, 3).setValues([line]);
+  try {
+    sh.getRange(sheetRow, 1, sheetRow, 3).breakApart();
+  } catch (e1) {}
+  sh.getRange(sheetRow, 1).setValue(line[0]);
+  sh.getRange(sheetRow, 2).setValue(line[1]);
+  sh.getRange(sheetRow, 3).setValue(line[2]);
 }
 
-function upsert_(body) {
-  var table = String(body.table || "");
-  var row = body.row || {};
+/** Dipakai importRoomsOnce / importMessagesOnce */
+function upsertRow_(table, row) {
+  if (!row || typeof row !== "object") return;
   if (!row.id) row.id = Utilities.getUuid();
   var sh = ensureTab_(table);
   var id = String(row.id);
@@ -151,14 +159,18 @@ function upsert_(body) {
   if (found > 0) {
     writeLine_(sh, found, line);
   } else {
-    // append tanpa mengandalkan appendRow (lebih aman ke kolom tepat)
     var next = Math.max(sh.getLastRow() + 1, 2);
     writeLine_(sh, next, line);
   }
+}
+
+function upsert_(body) {
+  var table = String(body.table || "");
+  var row = body.row || {};
+  upsertRow_(table, row);
   return json_({ ok: true, row: row });
 }
 
-/** Bulk import — lebih cepat & stabil untuk migrasi */
 function importBulk_(body) {
   var expected = props_().getProperty("ADMIN_PASSWORD");
   if (String(body.password || "") !== expected) {
@@ -169,20 +181,19 @@ function importBulk_(body) {
   if (TABS.indexOf(table) < 0) return json_({ ok: false, error: "table invalid" });
   if (!rows.length) return json_({ ok: true, imported: 0 });
 
-  var sh = ensureTab_(table);
+  ensureTab_(table);
   var n = 0;
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i] || {};
-    if (!row.id) row.id = Utilities.getUuid();
-    var id = String(row.id);
-    var line = [id, JSON.stringify(row), new Date().toISOString()];
-    var found = findRowById_(sh, id);
-    if (found > 0) writeLine_(sh, found, line);
-    else {
-      var next = Math.max(sh.getLastRow() + 1, 2);
-      writeLine_(sh, next, line);
+    if (table === "chat_rooms" && row.access_password === null) row.access_password = "";
+    if (table === "chat_messages") {
+      row.display_name = row.author_name || row.display_name || "Anonim";
+      row.avatar = row.avatar_emoji || row.avatar || "💬";
     }
+    upsertRow_(table, row);
     n++;
+    // jeda ringan tiap 40 baris agar tidak kehabisan waktu
+    if (n % 40 === 0) Utilities.sleep(50);
   }
   return json_({ ok: true, imported: n });
 }
@@ -222,4 +233,138 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
     ContentService.MimeType.JSON
   );
+}
+
+/**
+ * Jalankan dari editor GAS (Run) — import 10 ruang.
+ * Tidak lewat chat-migrate.html.
+ */
+function importRoomsOnce() {
+  var ROOMS_JSON = [
+    {
+      id: "71ed5a8c-6531-468d-af8f-f32b3ccbc69c",
+      name: "Lintas angkatan (global)",
+      description: "Ruang gabungan semua angkatan (histori global). legacy_global",
+      access_password: "",
+      is_active: true,
+      sort_order: 0,
+      created_at: "2026-10-24 07:10:31.955467+00",
+    },
+    {
+      id: "c5c0cf90-a741-41bb-a77d-96fcd4b9a603",
+      name: "52 Task",
+      description: "ruang diskusi kelas 52",
+      access_password: "",
+      is_active: true,
+      sort_order: 0,
+      created_at: "2026-10-26 04:49:56.482698+00",
+    },
+    {
+      id: "350643ec-144f-4218-8586-63122b9fa916",
+      name: "Tugas 52",
+      description: "kumpulin tugas khusus santriw 52",
+      access_password: "Bismillaah",
+      is_active: true,
+      sort_order: 0,
+      created_at: "2026-10-29 06:23:54.304533+00",
+    },
+    {
+      id: "fafa9f1e-e633-4c73-a18d-83e7af8c2248",
+      name: "51 - Tugas Pengembangan",
+      description: "Tempat submit tugas pengembangan website kelas 51",
+      access_password: "Bismillaah",
+      is_active: true,
+      sort_order: 0,
+      created_at: "2026-11-04 03:52:30.976034+00",
+    },
+    {
+      id: "7913167c-bf15-4501-be98-760c6763b51f",
+      name: "52 - Tugas Pengembangan",
+      description: "Pengumpulan tugas pengambengan Web",
+      access_password: "Bismillaah",
+      is_active: true,
+      sort_order: 0,
+      created_at: "2026-11-04 06:20:52.964454+00",
+    },
+    {
+      id: "a7530f42-3e1d-4550-b9cc-d997704387db",
+      name: "51 Task",
+      description: "Diskusi tugas santriw 51",
+      access_password: "",
+      is_active: true,
+      sort_order: 2,
+      created_at: "2026-10-24 06:41:08.905934+00",
+    },
+    {
+      id: "46dd0542-642b-4ced-a980-2109e33e69bd",
+      name: "Ang. 2025",
+      description: "Ruang dari angkatan (migrasi otomatis).",
+      access_password: "",
+      is_active: true,
+      sort_order: 3,
+      created_at: "2026-10-24 06:51:24.225735+00",
+    },
+    {
+      id: "806e9d60-2776-442d-90a4-63ecb38544d2",
+      name: "Ang. 2024",
+      description: "Ruang dari angkatan (migrasi otomatis).",
+      access_password: "",
+      is_active: true,
+      sort_order: 4,
+      created_at: "2026-10-24 06:51:24.225735+00",
+    },
+    {
+      id: "34a931ef-17dc-4297-a158-312c46a5142f",
+      name: "Secret Room",
+      description: "Chat rahasia tim Bacon Boy",
+      access_password: "Amanah0328*",
+      is_active: true,
+      sort_order: 4,
+      created_at: "2026-10-24 07:34:11.134861+00",
+    },
+    {
+      id: "98e81c68-2cab-4f0b-b1d9-0f1c2fb83baa",
+      name: "Ang. 2023",
+      description: "Ruang dari angkatan (migrasi otomatis).",
+      access_password: "",
+      is_active: true,
+      sort_order: 10,
+      created_at: "2026-10-24 06:51:24.225735+00",
+    },
+  ];
+  ROOMS_JSON.forEach(function (row) {
+    if (row.access_password === null) row.access_password = "";
+    upsertRow_("chat_rooms", row);
+  });
+  Logger.log("importRoomsOnce done: " + ROOMS_JSON.length);
+}
+
+/**
+ * Untuk pesan: JANGAN tempel ribuan baris di sini.
+ * Pakai tools/chat-migrate.html (importBulk) batch 50–100,
+ * atau tempel subset MSGS_JSON lalu Run importMessagesOnce.
+ */
+function importMessagesOnce() {
+  var MSGS_JSON = []; // isi array kecil, atau pakai chat-migrate.html
+  if (!MSGS_JSON.length) {
+    Logger.log("MSGS_JSON kosong — pakai chat-migrate.html dengan action importBulk");
+    return;
+  }
+  MSGS_JSON.forEach(function (row) {
+    row.display_name = row.author_name || row.display_name || "Anonim";
+    row.avatar = row.avatar_emoji || row.avatar || "💬";
+    upsertRow_("chat_messages", row);
+  });
+  Logger.log("importMessagesOnce done: " + MSGS_JSON.length);
+}
+
+/** Utility: unmerge semua tab chat */
+function fixUnmergeChatTabs() {
+  ["chat_rooms", "chat_messages"].forEach(function (name) {
+    var sh = ensureTab_(name);
+    try {
+      sh.getRange(1, 1, sh.getMaxRows(), Math.max(3, sh.getMaxColumns())).breakApart();
+    } catch (e) {}
+  });
+  Logger.log("unmerge done");
 }
