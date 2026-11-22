@@ -605,7 +605,19 @@ function userChangePassword_(body) {
  * Upload media chat (suara/gambar) ke Google Drive — ganti Supabase Storage saat mode Sheets.
  * body: { data|base64, mime, name, kind }
  * Returns public-ish direct URL for <audio>/<img>.
+ *
+ * PENTING — otorisasi Drive (sekali saja):
+ * 1. Di editor Apps Script, pilih fungsi setupDriveMedia
+ * 2. Klik Run (▶️)
+ * 3. Review permissions → Allow (izinkan Google Drive)
+ * 4. Deploy → Manage deployments → Edit → New version → Deploy
  */
+function setupDriveMedia() {
+  var folder = getOrCreateMediaFolder_();
+  Logger.log("OK folder: " + folder.getName() + " id=" + folder.getId());
+  return folder.getId();
+}
+
 function getOrCreateMediaFolder_() {
   var props = props_();
   var folderId = props.getProperty("CHAT_MEDIA_FOLDER_ID");
@@ -614,12 +626,26 @@ function getOrCreateMediaFolder_() {
       return DriveApp.getFolderById(folderId);
     } catch (e) {}
   }
-  var folders = DriveApp.getFoldersByName("Silverhawk-Class-Chat-Media");
   var folder;
-  if (folders.hasNext()) {
-    folder = folders.next();
-  } else {
-    folder = DriveApp.createFolder("Silverhawk-Class-Chat-Media");
+  try {
+    var folders = DriveApp.getFoldersByName("Silverhawk-Class-Chat-Media");
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder("Silverhawk-Class-Chat-Media");
+    }
+  } catch (ePerm) {
+    // Fallback: buat di root tanpa list-by-name (kadang scope sudah ada untuk create)
+    try {
+      folder = DriveApp.createFolder("Silverhawk-Class-Chat-Media");
+    } catch (e2) {
+      throw new Error(
+        "Izin Google Drive belum diaktifkan di Apps Script. " +
+          "Buka editor GAS → jalankan fungsi setupDriveMedia → Allow → Deploy New version. " +
+          "Detail: " +
+          String(ePerm.message || ePerm)
+      );
+    }
   }
   try {
     props.setProperty("CHAT_MEDIA_FOLDER_ID", folder.getId());

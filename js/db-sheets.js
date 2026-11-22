@@ -1088,6 +1088,7 @@
 
     /**
      * Upload media via GAS → Google Drive (mode Sheets; hindari Supabase Storage/quota).
+     * File sangat kecil (&lt;32KB) bisa fallback data-URL jika Drive belum diotorisasi.
      */
     uploadMediaViaGas: async function (blobOrFile, kind) {
       if (!blobOrFile) throw new Error("Tidak ada file");
@@ -1104,14 +1105,38 @@
         (blobOrFile.name && String(blobOrFile.name)) ||
         (kind === "image" ? "chat-img-" + Date.now() + ".jpg" : "voice-" + Date.now() + ".webm");
       var b64 = await SheetsDB._blobToBase64(blobOrFile);
-      var data = await gasCall("uploadMedia", {
-        data: b64,
-        mime: type,
-        name: name,
-        kind: kind || "file",
-      });
-      if (!data || !data.url) throw new Error((data && data.error) || "Upload gagal");
-      return data.url;
+      try {
+        var data = await gasCall("uploadMedia", {
+          data: b64,
+          mime: type,
+          name: name,
+          kind: kind || "file",
+        });
+        if (!data || !data.url) throw new Error((data && data.error) || "Upload gagal");
+        return data.url;
+      } catch (err) {
+        var msg = String((err && err.message) || err || "");
+        var needsDrive =
+          /DriveApp|auth\/drive|izin.*Drive|tidak memiliki izin|authorization/i.test(msg);
+        // Fallback data-URL hanya untuk file sangat kecil (agar pesan tetap terkirim)
+        if (blobOrFile.size <= 32 * 1024) {
+          var dataUrl = "data:" + type + ";base64," + b64;
+          return dataUrl;
+        }
+        if (needsDrive) {
+          throw new Error(
+            "Izin Google Drive di Apps Script belum diaktifkan.\n\n" +
+              "Lakukan sekali ini:\n" +
+              "1. Buka project Apps Script (ClassSheetsBackend)\n" +
+              "2. Pilih fungsi setupDriveMedia → Run ▶️\n" +
+              "3. Review permissions → Allow (Google Drive)\n" +
+              "4. Deploy → Manage deployments → New version → Deploy\n\n" +
+              "Detail: " +
+              msg.slice(0, 180)
+          );
+        }
+        throw err;
+      }
     },
 
     uploadChatAudio: async function (blobOrFile) {
