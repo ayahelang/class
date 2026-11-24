@@ -1,6 +1,4 @@
-Class Sheets CRUD lock v2
-- Karya (video/website/design) via Sheet
-- Hard block Supabase in sheets mode  
-- Chat search autofill guard
-- Profile linked fields for my-works
-
+- updateMyLink / unlink / contact on Sheets
+- my-works gate uses linked fields from session
+- videos: newest first, sort UI, angkatan from video row, YT oembed title/desc
+- addMyVideo stores owner_name, angkatan_year, class_code

@@ -52,14 +52,23 @@
     try {
       await GalleryDB.upsertMyProfileFromSession();
       const prof = await GalleryDB.getMyProfile();
-      const isTeacher = !!(prof && (prof.is_admin || prof.role === "teacher"));
-      const isStudent = !!(prof && prof.linked_student_name && prof.linked_angkatan_year);
-      if (!isTeacher && !isStudent) {
+      const isTeacher = !!(prof && (prof.is_admin || prof.role === "teacher" || prof.role === "admin"));
+      const isStudent = !!(
+        prof &&
+        (prof.linked_student_name || prof.display_name) &&
+        (prof.linked_angkatan_year || prof.angkatan_year)
+      );
+      // Admin selalu boleh kelola
+      const isAdmin = !!(prof && prof.is_admin);
+      if (!isTeacher && !isStudent && !isAdmin) {
+        $("#needLogin").hidden = false;
+        $("#works").hidden = true;
         $("#needLogin").innerHTML =
-          `<p class="muted">Siswa: tautkan nama & angkatan di Profil. Pengajar: minta admin menyetujui peran pengajar.</p>
+          `<p class="muted">Siswa: tautkan nama &amp; angkatan di Profil. Pengajar: minta admin menyetujui peran pengajar.</p>
            <p><a class="btn btn-primary" href="profile.html">Buka Profil</a></p>`;
         return;
       }
+      $("#needLogin").innerHTML = `<p class="muted">Memuat karya…</p>`;
     } catch (e) {
       $("#needLogin").textContent = e.message || String(e);
       return;

@@ -2,6 +2,30 @@
   const $ = (s) => document.querySelector(s);
   const grid = $("#videoGrid");
   let all = [];
+  let sortMode = "newest"; // newest | oldest | popular
+
+  function applySort(list) {
+    list = (list || []).slice();
+    if (sortMode === "oldest") {
+      list.sort(function (a, b) {
+        return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+      });
+    } else if (sortMode === "popular") {
+      list.sort(function (a, b) {
+        var pa = Number(a.play_count || a.views || a.likes || 0);
+        var pb = Number(b.play_count || b.views || b.likes || 0);
+        if (pb !== pa) return pb - pa;
+        return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+      });
+    } else {
+      // newest default
+      list.sort(function (a, b) {
+        return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+      });
+    }
+    return list;
+  }
+
   let students = [];
   let state = {
     q: "",
@@ -121,26 +145,35 @@
   }
 
   function enrich(v) {
+    v = v || {};
+    v.owner_name = v.owner_name || v.author_name || "";
+    if (v.angkatan_year || v.class_code) {
+      return Object.assign({}, v, {
+        _class: String(v.class_code || ""),
+        _year: String(v.angkatan_year || ""),
+      });
+    }
     const on = v.owner_name || "";
-    if (!on) return Object.assign({}, v, { _class: "", _year: "" });
-    const hit = students.find((s) => norm(s.name) === norm(on));
+    const hit = (students || []).find(function (s) {
+      return on && normName(s.name) === normName(on);
+    });
     if (hit) return Object.assign({}, v, { _class: String(hit.class || ""), _year: String(hit.angkatan || "") });
-    const m = String(v.description || "").match(/Angkatan\s+(\d{4}).*?(\d{2})/i);
-    if (m) return Object.assign({}, v, { _year: m[1], _class: m[2] });
     return Object.assign({}, v, { _class: "", _year: "" });
   }
 
   function filtered() {
-    return all.filter((v) => {
-      if (state.cat !== "all" && v.category_id !== state.cat) return false;
-      if (state.year && v._year && v._year !== state.year) return false;
-      if (state.kelas && v._class && v._class !== state.kelas) return false;
-      if (state.q) {
-        const hay = [v.title, v.description, v.owner_name, v.url].join(" ").toLowerCase();
-        if (!hay.includes(state.q)) return false;
-      }
-      return true;
-    });
+    return applySort(
+      all.filter(function (v) {
+        if (state.cat !== "all" && v.category_id !== state.cat) return false;
+        if (state.year && v._year && String(v._year) !== String(state.year)) return false;
+        if (state.kelas && v._class && String(v._class) !== String(state.kelas)) return false;
+        if (state.q) {
+          const hay = [v.title, v.description, v.owner_name, v.url].join(" ").toLowerCase();
+          if (!hay.includes(state.q)) return false;
+        }
+        return true;
+      })
+    );
   }
 
   function card(v) {
@@ -480,6 +513,34 @@
   }
 
   async function init() {
+
+    // Sort UI
+    (function ensureSortUI() {
+      var host = document.querySelector(".filters") || document.querySelector("#videoFilters") || document.querySelector("main");
+      if (!host || document.getElementById("videoSort")) return;
+      var wrap = document.createElement("div");
+      wrap.id = "videoSort";
+      wrap.className = "filters";
+      wrap.style.margin = "8px 0 12px";
+      wrap.innerHTML =
+        '<span class="muted" style="font-size:12px;margin-right:6px">Urutkan:</span>' +
+        '<button type="button" class="filter active" data-sort="newest">Terbaru</button>' +
+        '<button type="button" class="filter" data-sort="oldest">Terlama</button>' +
+        '<button type="button" class="filter" data-sort="popular">Terpopuler</button>';
+      host.parentNode.insertBefore(wrap, host.nextSibling);
+      wrap.querySelectorAll("[data-sort]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          sortMode = b.getAttribute("data-sort") || "newest";
+          wrap.querySelectorAll("[data-sort]").forEach(function (x) {
+            x.classList.toggle("active", x === b);
+          });
+          try {
+            render();
+          } catch (e) {}
+        });
+      });
+    })();
+
     const empty = $("#videoEmpty");
     if (!window.GalleryDB || !GalleryDB.enabled()) {
       if (empty) {

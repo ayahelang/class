@@ -120,20 +120,32 @@
   }
 
   function writeSession(o) {
-    var hours = Number(cfg().sessionHours) || 8;
     o = o || {};
+    var hours = Number(cfg().sessionHours) || 8;
+    var prev = {};
+    try {
+      prev = JSON.parse(sessionStorage.getItem(LS_SESSION) || "{}") || {};
+    } catch (e) {
+      prev = {};
+    }
     var s = {
       ok: true,
-      role: o.role || "admin",
-      name: o.name || "Admin",
-      email: o.email || "admin-sheets@local",
-      token: o.token || ("t-" + Date.now()),
+      role: o.role != null ? o.role : (prev.role || "student"),
+      name: o.name != null ? o.name : (prev.name || "User"),
+      email: o.email != null ? o.email : (prev.email || "user@sheets.local"),
+      token: o.token || prev.token || ("t-" + Date.now()),
       exp: Date.now() + hours * 3600 * 1000,
-      user_id: o.user_id || "",
-      alumni_id: o.alumni_id || "",
-      angkatan_year: o.angkatan_year || "",
-      class_code: o.class_code || "",
-      must_change_password: !!o.must_change_password,
+      user_id: o.user_id != null ? o.user_id : (prev.user_id || ""),
+      alumni_id: o.alumni_id != null ? o.alumni_id : (prev.alumni_id || ""),
+      angkatan_year: o.angkatan_year != null ? String(o.angkatan_year) : String(prev.angkatan_year || ""),
+      class_code: o.class_code != null ? String(o.class_code) : String(prev.class_code || ""),
+      must_change_password:
+        o.must_change_password != null ? !!o.must_change_password : !!prev.must_change_password,
+      contact_wa: o.contact_wa != null ? o.contact_wa : prev.contact_wa || "",
+      contact_ig: o.contact_ig != null ? o.contact_ig : prev.contact_ig || "",
+      contact_fb: o.contact_fb != null ? o.contact_fb : prev.contact_fb || "",
+      contact_twitter: o.contact_twitter != null ? o.contact_twitter : prev.contact_twitter || "",
+      contact_tiktok: o.contact_tiktok != null ? o.contact_tiktok : prev.contact_tiktok || "",
     };
     sessionStorage.setItem(LS_SESSION, JSON.stringify(s));
     return s;
@@ -1374,16 +1386,29 @@
       payload = payload || {};
       var url = String(payload.url || "").trim();
       if (!url) throw new Error("URL video wajib");
+      var title = String(payload.title || "").trim();
+      var description = String(payload.description || "").trim();
+      if ((!title || !description) && /youtu/i.test(url)) {
+        try {
+          var meta = await SheetsDB.fetchYoutubeMeta(url);
+          if (!title && meta.title) title = meta.title;
+          if (!description && meta.description) description = meta.description;
+        } catch (e) {}
+      }
+      var s = readSession() || {};
       var row = {
         id: "vid-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-        title: String(payload.title || "Video").trim().slice(0, 200),
+        title: title || "Video",
         url: url,
-        description: String(payload.description || "").trim().slice(0, 500),
+        description: description,
         platform: /youtu/i.test(url) ? "youtube" : /vimeo/i.test(url) ? "vimeo" : "video",
         author_user_id: owner.user_id,
         author_name: owner.name,
+        owner_name: owner.name,
         owner_email: owner.email,
         alumni_id: owner.alumni_id || null,
+        angkatan_year: String(s.angkatan_year || ""),
+        class_code: String(s.class_code || ""),
         active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1465,11 +1490,192 @@
     },
     // alias admin list
     listVideos: async function () {
-      return (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+      var rows = (await SheetsDB.listRows("videos", { limit: 3000 })) || [];
+      rows = rows.map(function (v) {
+        v.owner_name = v.owner_name || v.author_name || "";
+        v.platform = v.platform || (/youtu/i.test(String(v.url || "")) ? "youtube" : "video");
+        v.created_at = v.created_at || v.updated_at || "";
+        return v;
+      });
+      rows.sort(function (a, b) {
+        return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+      });
+      return rows;
     },
     listDesigns: async function () {
       var rows = (await SheetsDB.listRows("designs", { limit: 2000 })) || [];
       return rows.filter(function (r) { return r.active !== false && r.active !== "false"; });
+    },
+
+    // ---- Profil tautan (Sheets) ----
+    updateMyLink: async function (opts) {
+      opts = opts || {};
+      var s = readSession();
+      if (!s) throw new Error("Login dulu (database)");
+      var name = String(opts.studentName || opts.name || "").trim();
+      var year = String(opts.angkatanYear || opts.angkatan_year || "").trim();
+      var kelas = String(opts.classCode || opts.class_code || "").trim();
+      if (!name || !year) throw new Error("Nama dan angkatan wajib.");
+      writeSession({
+        name: name,
+        angkatan_year: year,
+        class_code: kelas,
+        role: s.role === "admin" ? "admin" : s.role === "teacher" ? "teacher" : "student",
+      });
+      // simpan juga di tab profiles
+      try {
+        var pid = s.user_id || ("sheets-" + (s.email || name));
+        await SheetsDB.upsertRow("profiles", {
+          id: pid,
+          email: s.email,
+          display_name: name,
+          linked_student_name: name,
+          linked_angkatan_year: year,
+          linked_class_code: kelas,
+          role: s.role || "student",
+          updated_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn("profiles upsert", e);
+      }
+      return SheetsDB.getMyProfile();
+    },
+
+    unlinkMyProfile: async function () {
+      var s = readSession();
+      if (!s) throw new Error("Login dulu (database)");
+      writeSession({
+        name: s.name,
+        angkatan_year: "",
+        class_code: "",
+        alumni_id: "",
+      });
+      try {
+        var pid = s.user_id || ("sheets-" + (s.email || "user"));
+        var rows = (await SheetsDB.listRows("profiles", { limit: 500 })) || [];
+        var prev = rows.find(function (r) { return String(r.id) === String(pid); }) || { id: pid };
+        await SheetsDB.upsertRow(
+          "profiles",
+          Object.assign({}, prev, {
+            linked_student_name: "",
+            linked_angkatan_year: "",
+            linked_class_code: "",
+            linked_alumni_id: null,
+            updated_at: new Date().toISOString(),
+          })
+        );
+      } catch (e) {}
+      return SheetsDB.getMyProfile();
+    },
+
+    revokeOtherLinksOnMyStudent: async function () {
+      // Sheets: tidak ada multi-akun Google; no-op
+      return { removed: 0 };
+    },
+
+    updateMyContact: async function (opts) {
+      opts = opts || {};
+      var s = readSession();
+      if (!s) throw new Error("Login dulu (database)");
+      writeSession({
+        contact_wa: opts.wa != null ? opts.wa : s.contact_wa,
+        contact_ig: opts.ig != null ? opts.ig : s.contact_ig,
+        contact_fb: opts.fb != null ? opts.fb : s.contact_fb,
+        contact_twitter: opts.twitter != null ? opts.twitter : s.contact_twitter,
+        contact_tiktok: opts.tiktok != null ? opts.tiktok : s.contact_tiktok,
+      });
+      try {
+        var pid = s.user_id || ("sheets-" + (s.email || "user"));
+        var rows = (await SheetsDB.listRows("profiles", { limit: 500 })) || [];
+        var prev = rows.find(function (r) { return String(r.id) === String(pid); }) || {
+          id: pid,
+          email: s.email,
+          display_name: s.name,
+        };
+        await SheetsDB.upsertRow(
+          "profiles",
+          Object.assign({}, prev, {
+            contact_wa: opts.wa != null ? opts.wa : prev.contact_wa,
+            contact_ig: opts.ig != null ? opts.ig : prev.contact_ig,
+            contact_fb: opts.fb != null ? opts.fb : prev.contact_fb,
+            contact_twitter: opts.twitter != null ? opts.twitter : prev.contact_twitter,
+            contact_tiktok: opts.tiktok != null ? opts.tiktok : prev.contact_tiktok,
+            contact_privacy: opts.privacy != null ? opts.privacy : prev.contact_privacy,
+            qris_image_url: opts.qrisImageUrl != null ? opts.qrisImageUrl : prev.qris_image_url,
+            profile_photo_url: opts.profilePhotoUrl != null ? opts.profilePhotoUrl : prev.profile_photo_url,
+            updated_at: new Date().toISOString(),
+          })
+        );
+      } catch (e) {
+        console.warn(e);
+      }
+      return SheetsDB.getMyProfile();
+    },
+
+    fetchYoutubeMeta: async function (url) {
+      url = String(url || "").trim();
+      if (!url || !/youtu/i.test(url)) return {};
+      var endpoints = [
+        "https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent(url),
+        "https://noembed.com/embed?url=" + encodeURIComponent(url),
+      ];
+      for (var i = 0; i < endpoints.length; i++) {
+        try {
+          var res = await fetch(endpoints[i]);
+          if (!res.ok) continue;
+          var j = await res.json();
+          return {
+            title: j.title || "",
+            description: j.author_name ? "Oleh " + j.author_name : "",
+            thumbnail: j.thumbnail_url || "",
+            author_name: j.author_name || "",
+          };
+        } catch (e) {}
+      }
+      return {};
+    },
+
+    deleteVideo: async function (id) {
+      return SheetsDB.deleteRow("videos", id);
+    },
+    upsertVideo: async function (payload) {
+      payload = payload || {};
+      var owner = SheetsDB._ownerKey() || {};
+      var url = String(payload.url || "").trim();
+      if (!url) throw new Error("URL video wajib");
+      var title = String(payload.title || "").trim();
+      var description = String(payload.description || "").trim();
+      if ((!title || !description) && /youtu/i.test(url)) {
+        try {
+          var meta = await SheetsDB.fetchYoutubeMeta(url);
+          if (!title && meta.title) title = meta.title;
+          if (!description && meta.description) description = meta.description;
+        } catch (e) {}
+      }
+      var s = readSession() || {};
+      var row = {
+        id: payload.id || "vid-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        title: title || "Video",
+        url: url,
+        description: description,
+        platform: payload.platform || (/youtu/i.test(url) ? "youtube" : "video"),
+        owner_name: payload.owner_name || payload.ownerName || owner.name || s.name || "",
+        author_name: payload.author_name || owner.name || s.name || "",
+        author_user_id: owner.user_id || s.user_id || "",
+        owner_email: owner.email || s.email || "",
+        angkatan_year: String(payload.angkatan_year || s.angkatan_year || ""),
+        class_code: String(payload.class_code || s.class_code || ""),
+        category_id: payload.category_id || payload.categoryId || "",
+        active: payload.active !== false,
+        created_at: payload.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      if (payload.id) {
+        var all = (await SheetsDB.listRows("videos", { limit: 3000 })) || [];
+        var prev = all.find(function (r) { return String(r.id) === String(payload.id); });
+        if (prev) row = Object.assign({}, prev, row, { id: payload.id, created_at: prev.created_at || row.created_at });
+      }
+      return SheetsDB.upsertRow("videos", row);
     },
   };
 
