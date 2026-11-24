@@ -223,11 +223,19 @@
     getMyProfile: async function () {
       var s = readSession();
       if (!s) return null;
+      var role = s.role || "student";
+      var name = s.name || "User";
       return {
-        id: "sheets-" + s.email,
+        id: s.user_id || ("sheets-" + (s.email || "user")),
         email: s.email,
-        display_name: s.name,
-        is_admin: s.role === "admin",
+        display_name: name,
+        is_admin: role === "admin",
+        role: role === "admin" ? "admin" : role === "teacher" ? "teacher" : "student",
+        linked_student_name: name,
+        linked_angkatan_year: s.angkatan_year || s.linked_angkatan_year || "",
+        linked_alumni_id: s.alumni_id || "",
+        class_code: s.class_code || "",
+        alumni_id: s.alumni_id || "",
       };
     },
 
@@ -1273,6 +1281,195 @@
     },
     subscribeAttendanceLive: function () {
       return { unsubscribe: function () {} };
+    },
+
+// ========== Karya siswa (video / website / desain) — Sheets ==========
+    _ownerKey: function () {
+      var s = readSession();
+      if (!s) return null;
+      return {
+        user_id: s.user_id || ("sheets-" + (s.email || "user")),
+        alumni_id: s.alumni_id || "",
+        name: s.name || "",
+        email: s.email || "",
+      };
+    },
+    _isMine: function (row, owner) {
+      if (!row || !owner) return false;
+      if (row.author_user_id && String(row.author_user_id) === String(owner.user_id)) return true;
+      if (row.user_id && String(row.user_id) === String(owner.user_id)) return true;
+      if (owner.alumni_id && row.alumni_id && String(row.alumni_id) === String(owner.alumni_id)) return true;
+      if (owner.name && row.author_name && String(row.author_name).toLowerCase() === String(owner.name).toLowerCase()) return true;
+      if (owner.email && row.owner_email && String(row.owner_email) === String(owner.email)) return true;
+      return false;
+    },
+
+    myWebsites: async function () {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) return [];
+      var rows = (await SheetsDB.listRows("websites", { limit: 2000 })) || [];
+      return rows.filter(function (r) { return SheetsDB._isMine(r, owner); });
+    },
+    addMyWebsite: async function (payload) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      payload = payload || {};
+      var url = String(payload.url || "").trim();
+      if (!/^https?:\/\//i.test(url)) throw new Error("URL harus http(s)");
+      var row = {
+        id: "web-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        title: String(payload.title || "Website").trim().slice(0, 200),
+        url: url,
+        category: String(payload.category || "Web Kreatif").trim() || "Web Kreatif",
+        alumni_id: owner.alumni_id || null,
+        author_user_id: owner.user_id,
+        author_name: owner.name,
+        owner_email: owner.email,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return SheetsDB.upsertRow("websites", row);
+    },
+    updateMyWebsite: async function (id, payload) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      var rows = (await SheetsDB.listRows("websites", { limit: 2000 })) || [];
+      var prev = rows.find(function (r) { return String(r.id) === String(id); });
+      if (!prev) throw new Error("Website tidak ditemukan");
+      if (!SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+        throw new Error("Tidak berhak mengubah karya ini");
+      }
+      payload = payload || {};
+      var row = Object.assign({}, prev, {
+        title: payload.title != null ? String(payload.title).trim() : prev.title,
+        url: payload.url != null ? String(payload.url).trim() : prev.url,
+        category: payload.category != null ? String(payload.category).trim() : prev.category,
+        updated_at: new Date().toISOString(),
+      });
+      return SheetsDB.upsertRow("websites", row);
+    },
+    deleteMyWebsite: async function (id) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      var rows = (await SheetsDB.listRows("websites", { limit: 2000 })) || [];
+      var prev = rows.find(function (r) { return String(r.id) === String(id); });
+      if (prev && !SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+        throw new Error("Tidak berhak menghapus karya ini");
+      }
+      return SheetsDB.deleteRow("websites", id);
+    },
+
+    myVideos: async function () {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) return [];
+      var rows = (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+      return rows.filter(function (r) { return SheetsDB._isMine(r, owner); }).map(function (v) {
+        v.platform = v.platform || (String(v.url || "").indexOf("youtu") >= 0 ? "youtube" : "video");
+        return v;
+      });
+    },
+    addMyVideo: async function (payload) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      payload = payload || {};
+      var url = String(payload.url || "").trim();
+      if (!url) throw new Error("URL video wajib");
+      var row = {
+        id: "vid-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+        title: String(payload.title || "Video").trim().slice(0, 200),
+        url: url,
+        description: String(payload.description || "").trim().slice(0, 500),
+        platform: /youtu/i.test(url) ? "youtube" : /vimeo/i.test(url) ? "vimeo" : "video",
+        author_user_id: owner.user_id,
+        author_name: owner.name,
+        owner_email: owner.email,
+        alumni_id: owner.alumni_id || null,
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return SheetsDB.upsertRow("videos", row);
+    },
+    updateMyVideo: async function (id, payload) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      var rows = (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+      var prev = rows.find(function (r) { return String(r.id) === String(id); });
+      if (!prev) throw new Error("Video tidak ditemukan");
+      if (!SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+        throw new Error("Tidak berhak mengubah karya ini");
+      }
+      payload = payload || {};
+      var row = Object.assign({}, prev, {
+        title: payload.title != null ? String(payload.title).trim() : prev.title,
+        url: payload.url != null ? String(payload.url).trim() : prev.url,
+        description: payload.description != null ? String(payload.description).trim() : prev.description,
+        updated_at: new Date().toISOString(),
+      });
+      return SheetsDB.upsertRow("videos", row);
+    },
+    deleteMyVideo: async function (id) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      var rows = (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+      var prev = rows.find(function (r) { return String(r.id) === String(id); });
+      if (prev && !SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+        throw new Error("Tidak berhak menghapus karya ini");
+      }
+      return SheetsDB.deleteRow("videos", id);
+    },
+
+    myDesigns: async function () {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) return [];
+      var rows = (await SheetsDB.listRows("designs", { limit: 2000 })) || [];
+      return rows.filter(function (r) { return SheetsDB._isMine(r, owner); });
+    },
+    upsertDesign: async function (payload) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      payload = payload || {};
+      var row = {
+        id: payload.id || ("des-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7)),
+        title: String(payload.title || "").trim().slice(0, 200),
+        image_url: String(payload.image_url || "").trim().slice(0, 800),
+        category: String(payload.category || "Umum").trim().slice(0, 80),
+        description: String(payload.description || "").trim().slice(0, 500),
+        author_name: owner.name || payload.author_name || "Siswa",
+        author_user_id: owner.user_id,
+        owner_email: owner.email,
+        active: payload.active !== false,
+        updated_at: new Date().toISOString(),
+        created_at: payload.created_at || new Date().toISOString(),
+      };
+      if (!row.title || !row.image_url) throw new Error("Judul dan gambar (URL) wajib");
+      if (payload.id) {
+        var all = (await SheetsDB.listRows("designs", { limit: 2000 })) || [];
+        var prev = all.find(function (r) { return String(r.id) === String(payload.id); });
+        if (prev && !SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+          throw new Error("Tidak berhak mengubah desain ini");
+        }
+        if (prev) row = Object.assign({}, prev, row, { id: payload.id });
+      }
+      return SheetsDB.upsertRow("designs", row);
+    },
+    deleteDesign: async function (id) {
+      var owner = SheetsDB._ownerKey();
+      if (!owner) throw new Error("Login dulu (database)");
+      var rows = (await SheetsDB.listRows("designs", { limit: 2000 })) || [];
+      var prev = rows.find(function (r) { return String(r.id) === String(id); });
+      if (prev && !SheetsDB._isMine(prev, owner) && !(await SheetsDB.isCurrentUserAdmin())) {
+        throw new Error("Tidak berhak menghapus desain ini");
+      }
+      return SheetsDB.deleteRow("designs", id);
+    },
+    // alias admin list
+    listVideos: async function () {
+      return (await SheetsDB.listRows("videos", { limit: 2000 })) || [];
+    },
+    listDesigns: async function () {
+      var rows = (await SheetsDB.listRows("designs", { limit: 2000 })) || [];
+      return rows.filter(function (r) { return r.active !== false && r.active !== "false"; });
     },
   };
 

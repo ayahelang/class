@@ -63,6 +63,23 @@
       "isCurrentUserAdmin",
       "getMyProfile",
       "upsertMyProfileFromSession",
+      "myWebsites",
+      "addMyWebsite",
+      "updateMyWebsite",
+      "deleteMyWebsite",
+      "myVideos",
+      "addMyVideo",
+      "updateMyVideo",
+      "deleteMyVideo",
+      "myDesigns",
+      "upsertDesign",
+      "deleteDesign",
+      "listVideos",
+      "listDesigns",
+      "listDesignsPublic",
+      "userLoginPassword",
+      "listLoginDirectory",
+
       "listAnnouncementsAdmin",
       "listAnnouncementsPublic",
       "upsertAnnouncement",
@@ -267,6 +284,36 @@
       return Promise.resolve({ meta: {}, students: [] });
     };
     G.fetchGalleryData = G.fetchGalleryFromDb;
+
+    
+    // Kunci ketat: mode sheets → JANGAN panggil Supabase sama sekali
+    Object.keys(G).forEach(function (k) {
+      if (typeof G[k] !== "function") return;
+      if (k === "enabled" || k === "getBackendMode" || k === "setBackendMode") return;
+      if (!G[k].__shWrapped) {
+        var origFn = G[k];
+        var wrapped = function () {
+          var args = arguments;
+          if (useSheets()) {
+            if (typeof S[k] === "function") return S[k].apply(S, args);
+            // method belum di-port: jangan tembak Supabase
+            if (k.indexOf("list") === 0 || k.indexOf("fetch") === 0 || k.indexOf("my") === 0) {
+              return Promise.resolve([]);
+            }
+            if (k.indexOf("get") === 0 || k.indexOf("is") === 0) {
+              return Promise.resolve(null);
+            }
+            if (k === "enabled") return true;
+            return Promise.reject(
+              new Error("Fitur \"" + k + "\" belum tersedia di mode database. Hubungi admin.")
+            );
+          }
+          return origFn.apply(null, args);
+        };
+        wrapped.__shWrapped = true;
+        G[k] = wrapped;
+      }
+    });
 
     G.getBackendMode = function () {
       return mode();

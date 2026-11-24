@@ -5,6 +5,45 @@
   const status = $("#chatStatus");
   const typingLine = $("#typingLine");
   const searchInput = $("#chatSearch");
+
+  // CHAT_SEARCH_AUTOFILL_GUARD: cegah browser mengisi kotak cari (mis. "sdit …")
+  (function guardChatSearch() {
+    var el = document.getElementById("chatSearch");
+    if (!el) return;
+    try {
+      el.setAttribute("autocomplete", "off");
+      el.setAttribute("autocorrect", "off");
+      el.setAttribute("autocapitalize", "off");
+      el.setAttribute("spellcheck", "false");
+      el.setAttribute("data-lpignore", "true");
+      el.setAttribute("data-form-type", "other");
+      el.name = "sh_chat_find_" + Date.now(); // nama unik → sulit di-autofill
+    } catch (e0) {}
+    function wipeGhost() {
+      // Hapus nilai yang disisipkan browser tanpa interaksi user
+      if (!el.dataset.userTyped && el.value) {
+        var v = String(el.value).trim().toLowerCase();
+        // pola yang sering muncul dari autofill situs/sekolah
+        if (v && (v.indexOf("sdit") >= 0 || v.indexOf("istiqomah") >= 0 || v.indexOf("daarul") >= 0 || v.length > 2)) {
+          // hanya wipe jika belum pernah user mengetik di sesi ini
+          if (!el.dataset.userTyped) el.value = "";
+        }
+      }
+    }
+    el.addEventListener("input", function () {
+      el.dataset.userTyped = "1";
+    });
+    el.value = "";
+    setTimeout(wipeGhost, 50);
+    setTimeout(wipeGhost, 300);
+    setTimeout(wipeGhost, 1000);
+    try {
+      new MutationObserver(function () {
+        if (!el.dataset.userTyped && el.value) wipeGhost();
+      }).observe(el, { attributes: true, attributeFilter: ["value"] });
+    } catch (e1) {}
+  })();
+
   const searchNav = $("#chatSearchNav");
   const searchCountEl = $("#chatSearchCount");
   const searchPrevBtn = $("#chatSearchPrev");
