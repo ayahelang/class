@@ -1,4 +1,4 @@
-Chat history missing fix:
-- GAS list_ filters by room_id BEFORE applying limit (scan whole sheet for that room)
-- Client requests limit 800–2000 instead of 200/500 global
-- Redeploy ClassSheetsBackend.gs (New version) wajib
+- listChatMessages fallback full scan if room filter empty
+- listChatReactions + toggleChatReaction on Google Sheets (tab chat_reactions)
+- GAS TABS includes chat_reactions
+- Redeploy GAS New version REQUIRED

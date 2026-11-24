@@ -351,33 +351,136 @@
         listChatMessages: async function (roomId, limit, angkatanId) {
       var rid = roomId != null && roomId !== "" && roomId !== "null" ? String(roomId).trim() : "";
       var aid = angkatanId != null && angkatanId !== "" && angkatanId !== "null" ? String(angkatanId).trim() : "";
-      // Ambil banyak baris; filter room_id di GAS (lihat listRows) supaya histori per-ruang tidak terpotong
-      var fetchLimit = Math.max(Number(limit) || 300, 2000);
-      var rows = await SheetsDB.listRows("chat_messages", {
-        limit: fetchLimit,
-        room_id: rid || undefined,
-        angkatan_id: aid || undefined,
-      });
-      rows = rows || [];
-      // filter klien (jaga-jaga GAS lama belum di-deploy)
-      if (rid) {
-        rows = rows.filter(function (r) {
-          return String(r.room_id || "").trim() === rid;
+      var fetchLimit = Math.max(Number(limit) || 300, 2500);
+
+      function norm(r) {
+        if (!r || typeof r !== "object") return r;
+        // normalisasi field untuk chat.js
+        if (!r.author_name && r.display_name) r.author_name = r.display_name;
+        if (!r.avatar_emoji && r.avatar) r.avatar_emoji = r.avatar;
+        if (r.room_id != null) r.room_id = String(r.room_id).trim();
+        if (r.room_id === "null") r.room_id = "";
+        return r;
+      }
+
+      function filterRows(rows) {
+        rows = (rows || []).map(norm);
+        if (rid) {
+          rows = rows.filter(function (r) {
+            return String(r.room_id || "").trim() === rid;
+          });
+        } else if (aid) {
+          rows = rows.filter(function (r) {
+            return String(r.angkatan_id || "").trim() === aid && !r.room_id;
+          });
+        }
+        rows.sort(function (a, b) {
+          var ta = Date.parse(a.created_at || "") || 0;
+          var tb = Date.parse(b.created_at || "") || 0;
+          return ta - tb;
         });
-      } else if (aid) {
-        rows = rows.filter(function (r) {
-          return String(r.angkatan_id || "").trim() === aid && !r.room_id;
+        if (limit && rows.length > limit) {
+          rows = rows.slice(rows.length - limit);
+        }
+        return rows;
+      }
+
+      var rows = [];
+      try {
+        rows = await SheetsDB.listRows("chat_messages", {
+          limit: fetchLimit,
+          room_id: rid || undefined,
+          angkatan_id: aid || undefined,
+        });
+        rows = filterRows(rows);
+      } catch (e1) {
+        console.warn("listChatMessages primary", e1);
+        rows = [];
+      }
+
+      // Fallback: jika filter ruang kosong, ambil SEMUA (tanpa room_id) lalu filter di klien
+      // Menangani GAS lama / limit global yang memotong histori per ruang
+      if (rid && (!rows || !rows.length)) {
+        try {
+          var all = await SheetsDB.listRows("chat_messages", { limit: 5000 });
+          rows = filterRows(all);
+          console.info("[chat] fallback full-scan room", rid, "→", rows.length);
+        } catch (e2) {
+          console.warn("listChatMessages fallback", e2);
+        }
+      }
+      return rows || [];
+    },
+
+    
+    listChatReactions: async function (messageIds) {
+      var ids = (messageIds || []).map(String).filter(Boolean).slice(0, 400);
+      var map = {};
+      ids.forEach(function (id) { map[id] = []; });
+      if (!ids.length) return map;
+      var rows = [];
+      try {
+        rows = (await SheetsDB.listRows("chat_reactions", { limit: 3000 })) || [];
+      } catch (e) {
+        console.warn("listChatReactions", e);
+        return map;
+      }
+      var want = {};
+      ids.forEach(function (id) { want[id] = 1; });
+      rows.forEach(function (r) {
+        var mid = String(r.message_id || r.messageId || "");
+        if (!want[mid]) return;
+        if (!map[mid]) map[mid] = [];
+        map[mid].push({
+          id: r.id,
+          message_id: mid,
+          emoji: r.emoji || "👍",
+          author_name: r.author_name || r.display_name || "Anonim",
+          author_user_id: r.author_user_id || r.user_id || null,
+          created_at: r.created_at || r.updated_at || null,
+        });
+      });
+      return map;
+    },
+
+    toggleChatReaction: async function (messageId, emoji, authorName) {
+      messageId = String(messageId || "");
+      emoji = String(emoji || "").trim().slice(0, 16);
+      if (!messageId || !emoji) throw new Error("Reaksi tidak valid");
+      var sess = null;
+      try { sess = await SheetsDB.getSession(); } catch (e) {}
+      var uid = sess && sess.user ? sess.user.id : null;
+      var name = String(authorName || (sess && sess.user && sess.user.user_metadata && sess.user.user_metadata.name) || "Anonim").slice(0, 80);
+
+      var rows = (await SheetsDB.listRows("chat_reactions", { limit: 3000 })) || [];
+      var mine = null;
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (String(r.message_id || "") !== messageId) continue;
+        if (uid && String(r.author_user_id || "") === String(uid)) { mine = r; break; }
+        if (!uid && String(r.author_name || "") === name && !r.author_user_id) { mine = r; break; }
+      }
+
+      if (mine && String(mine.emoji) === emoji) {
+        await SheetsDB.deleteRow("chat_reactions", mine.id);
+      } else if (mine) {
+        await SheetsDB.upsertRow("chat_reactions", Object.assign({}, mine, {
+          emoji: emoji,
+          author_name: name,
+          updated_at: new Date().toISOString(),
+        }));
+      } else {
+        await SheetsDB.upsertRow("chat_reactions", {
+          id: "rx-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+          message_id: messageId,
+          emoji: emoji,
+          author_name: name,
+          author_user_id: uid || null,
+          created_at: new Date().toISOString(),
         });
       }
-      rows.sort(function (a, b) {
-        var ta = Date.parse(a.created_at || "") || 0;
-        var tb = Date.parse(b.created_at || "") || 0;
-        return ta - tb;
-      });
-      if (limit && rows.length > limit) {
-        rows = rows.slice(rows.length - limit);
-      }
-      return rows;
+      var map = await SheetsDB.listChatReactions([messageId]);
+      return map[messageId] || [];
     },
 
     insertChatMessage: async function (payload) {

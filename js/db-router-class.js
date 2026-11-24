@@ -103,6 +103,8 @@
       "upsertChatRoom",
       "deleteChatRoom",
       "listChatMessages",
+      "toggleChatReaction",
+      "listChatReactions",
       "insertChatMessage",
       "listChat",
       "sendChat",
@@ -232,14 +234,16 @@
     };
 
     G.listChatReactions = function () {
+      if (useSheets() && S.listChatReactions) return S.listChatReactions.apply(S, arguments);
       if (useSheets()) return Promise.resolve({});
       if (typeof SB.listChatReactions === "function") return SB.listChatReactions.apply(null, arguments);
       return Promise.resolve({});
     };
     G.toggleChatReaction = function () {
-      if (useSheets()) return Promise.resolve({});
+      if (useSheets() && S.toggleChatReaction) return S.toggleChatReaction.apply(S, arguments);
+      if (useSheets()) return Promise.resolve([]);
       if (typeof SB.toggleChatReaction === "function") return SB.toggleChatReaction.apply(null, arguments);
-      return Promise.resolve({});
+      return Promise.resolve([]);
     };
     G.updateChat = async function (opts) {
       opts = opts || {};

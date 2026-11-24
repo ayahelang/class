@@ -2636,11 +2636,17 @@
       }
 
       allMessages = rows || [];
-      await refreshChatReactions();
+      try { await refreshChatReactions(); } catch (eRx) { console.warn(eRx); }
       renderMessages();
-      status.textContent = allMessages.length
-        ? "Ruang chat · " + allMessages.length + " pesan · realtime"
-        : "Ruang chat · belum ada pesan (histori lama belum tertaut?)";
+      if (allMessages.length) {
+        status.textContent = "Ruang chat · " + allMessages.length + " pesan";
+      } else {
+        status.textContent =
+          "Ruang chat · 0 pesan. Cek: Sheet chat_messages room_id=" +
+          String(roomId || angkatanId || "-").slice(0, 8) +
+          "… · mode " +
+          (GalleryDB.getBackendMode ? GalleryDB.getBackendMode() : "?");
+      }
 
       // meta ruang untuk clear chat
       currentRoomMeta = null;
