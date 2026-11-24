@@ -2614,20 +2614,20 @@
 
       let rows = [];
       if (roomId) {
-        rows = await GalleryDB.listChat({ roomId: roomId, limit: 200 });
+        rows = await GalleryDB.listChat({ roomId: roomId, limit: 800 });
       } else if (angkatanId) {
-        rows = await GalleryDB.listChat({ angkatanId: angkatanId, limit: 200 });
+        rows = await GalleryDB.listChat({ angkatanId: angkatanId, limit: 800 });
       }
 
       if (roomId && legacyAngkatanId) {
         try {
-          const legacy = await GalleryDB.listChat({ angkatanId: legacyAngkatanId, limit: 200 });
+          const legacy = await GalleryDB.listChat({ angkatanId: legacyAngkatanId, limit: 500 });
           rows = mergeRows(rows, legacy);
         } catch (e) {}
       }
       if (roomId && legacyGlobal) {
         try {
-          const legacy = await GalleryDB.listChat({ angkatanId: null, roomId: null, limit: 200 });
+          const legacy = await GalleryDB.listChat({ angkatanId: null, roomId: null, limit: 500 });
           const onlyGlobal = (legacy || []).filter(function (m) {
             return !m.room_id || String(m.room_id) === String(roomId);
           });

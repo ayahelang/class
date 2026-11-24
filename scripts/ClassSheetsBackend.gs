@@ -134,50 +134,58 @@ function list_(body) {
   var values = sh.getRange(1, 1, last, 3).getValues();
   var limit = Number(body.limit) || 500;
   if (limit < 1) limit = 500;
-  // chat_messages: ambil dari BAWAH (terbaru) agar tidak "hilang" saat refresh
+  // chat: izinkan limit lebih tinggi
+  if (table === "chat_messages" && limit < 2000) limit = Math.max(limit, 2000);
+
+  var filterRoom = body.room_id != null && body.room_id !== "" ? String(body.room_id) : "";
+  var filterAngkatan = body.angkatan_id != null && body.angkatan_id !== "" ? String(body.angkatan_id) : "";
   var newestFirst = table === "chat_messages" || body.newest === true || body.newest === "1";
+
+  function parseRow(id, js) {
+    if (!id) return null;
+    var obj = {};
+    try {
+      obj = JSON.parse(js);
+    } catch (e) {
+      obj = { id: id, raw: String(js) };
+    }
+    if (obj && obj.row_json && typeof obj.row_json === "object") {
+      var inner = obj.row_json;
+      if (!inner.id) inner.id = obj.id || id;
+      obj = inner;
+    }
+    obj.id = obj.id || id;
+    return obj;
+  }
+
+  function matchFilter(obj) {
+    if (!obj) return false;
+    if (filterRoom) {
+      return String(obj.room_id || "") === filterRoom;
+    }
+    if (filterAngkatan) {
+      return String(obj.angkatan_id || "") === filterAngkatan && !obj.room_id;
+    }
+    return true;
+  }
+
   var collected = [];
   if (newestFirst) {
+    // dari bawah (baris baru) ke atas — cocok untuk chat
     for (var i = values.length - 1; i >= 1 && collected.length < limit; i--) {
-      var idN = values[i][0];
-      var jsN = values[i][1];
-      if (!idN) continue;
-      var objN = {};
-      try {
-        objN = JSON.parse(jsN);
-      } catch (eN) {
-        objN = { id: idN, raw: String(jsN) };
-      }
-      if (objN && objN.row_json && typeof objN.row_json === "object") {
-        var innerN = objN.row_json;
-        if (!innerN.id) innerN.id = objN.id || idN;
-        objN = innerN;
-      }
-      objN.id = objN.id || idN;
+      var objN = parseRow(values[i][0], values[i][1]);
+      if (!matchFilter(objN)) continue;
       collected.push(objN);
     }
-    collected.reverse();
+    collected.reverse(); // chronological for UI
   } else {
     for (var j = 1; j < values.length && collected.length < limit; j++) {
-      var id = values[j][0];
-      var js = values[j][1];
-      if (!id) continue;
-      var obj = {};
-      try {
-        obj = JSON.parse(js);
-      } catch (e) {
-        obj = { id: id, raw: String(js) };
-      }
-      if (obj && obj.row_json && typeof obj.row_json === "object") {
-        var inner = obj.row_json;
-        if (!inner.id) inner.id = obj.id || id;
-        obj = inner;
-      }
-      obj.id = obj.id || id;
+      var obj = parseRow(values[j][0], values[j][1]);
+      if (!matchFilter(obj)) continue;
       collected.push(obj);
     }
   }
-  return json_({ ok: true, rows: collected });
+  return json_({ ok: true, rows: collected, total_scanned: values.length - 1 });
 }
 
 function findRowById_(sh, id) {

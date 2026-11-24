@@ -1,4 +1,4 @@
-- updateMyLink / unlink / contact on Sheets
-- my-works gate uses linked fields from session
-- videos: newest first, sort UI, angkatan from video row, YT oembed title/desc
-- addMyVideo stores owner_name, angkatan_year, class_code
+Chat history missing fix:
+- GAS list_ filters by room_id BEFORE applying limit (scan whole sheet for that room)
+- Client requests limit 800–2000 instead of 200/500 global
+- Redeploy ClassSheetsBackend.gs (New version) wajib

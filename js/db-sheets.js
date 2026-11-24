@@ -257,12 +257,18 @@
 
     // ---- generic table helpers ----
     listRows: async function (table, opts) {
+      opts = opts || {};
       var payload = {
         table: table,
-        limit: (opts && opts.limit) || 500,
+        limit: opts.limit || 500,
       };
-      // chat: minta baris terbaru dari GAS
-      if (table === "chat_messages") payload.newest = true;
+      // chat: minta baris terbaru + filter ruang di server
+      if (table === "chat_messages") {
+        payload.newest = true;
+        if (opts.room_id || opts.roomId) payload.room_id = String(opts.room_id || opts.roomId);
+        if (opts.angkatan_id || opts.angkatanId) payload.angkatan_id = String(opts.angkatan_id || opts.angkatanId);
+        if (!payload.limit || payload.limit < 1500) payload.limit = 2000;
+      }
       var data = await gasCall("list", payload);
       var rows = (data && data.rows) || [];
       return rows.map(function (obj) {
@@ -342,20 +348,25 @@
     deleteChatRoom: async function (id) {
       return SheetsDB.deleteRow("chat_rooms", id);
     },
-    listChatMessages: async function (roomId, limit, angkatanId) {
-      // Ambil lebih banyak lalu filter — GAS list chat_messages pakai newest-first
-      var rows = await SheetsDB.listRows("chat_messages", { limit: Math.max(limit || 200, 500) });
+        listChatMessages: async function (roomId, limit, angkatanId) {
+      var rid = roomId != null && roomId !== "" && roomId !== "null" ? String(roomId).trim() : "";
+      var aid = angkatanId != null && angkatanId !== "" && angkatanId !== "null" ? String(angkatanId).trim() : "";
+      // Ambil banyak baris; filter room_id di GAS (lihat listRows) supaya histori per-ruang tidak terpotong
+      var fetchLimit = Math.max(Number(limit) || 300, 2000);
+      var rows = await SheetsDB.listRows("chat_messages", {
+        limit: fetchLimit,
+        room_id: rid || undefined,
+        angkatan_id: aid || undefined,
+      });
       rows = rows || [];
-      var rid = roomId != null && roomId !== "" ? String(roomId) : "";
-      var aid = angkatanId != null && angkatanId !== "" ? String(angkatanId) : "";
+      // filter klien (jaga-jaga GAS lama belum di-deploy)
       if (rid) {
         rows = rows.filter(function (r) {
-          return String(r.room_id || "") === rid;
+          return String(r.room_id || "").trim() === rid;
         });
       } else if (aid) {
         rows = rows.filter(function (r) {
-          // ruang angkatan: cocok angkatan_id dan tanpa room_id custom
-          return String(r.angkatan_id || "") === aid && !r.room_id;
+          return String(r.angkatan_id || "").trim() === aid && !r.room_id;
         });
       }
       rows.sort(function (a, b) {
@@ -368,6 +379,7 @@
       }
       return rows;
     },
+
     insertChatMessage: async function (payload) {
       payload = payload || {};
       payload.created_at = payload.created_at || new Date().toISOString();
@@ -397,7 +409,7 @@
     /** Alias yang dipakai chat.js lewat router */
     listChat: async function (opts) {
       opts = opts || {};
-      return SheetsDB.listChatMessages(opts.roomId || opts.room_id || null, opts.limit || 200, opts.angkatanId || opts.angkatan_id || null);
+      return SheetsDB.listChatMessages(opts.roomId || opts.room_id || null, opts.limit || 800, opts.angkatanId || opts.angkatan_id || null);
     },
     sendChat: async function (opts) {
       opts = opts || {};
